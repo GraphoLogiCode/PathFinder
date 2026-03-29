@@ -92,21 +92,6 @@ Trained on the **xBD (xView2) dataset** — 10 real-world disasters across 5 cou
 
 ---
 
-## Demo Images
-
-Pre-selected satellite images with confirmed damage are in `demo/images/`:
-
-| File | Location | GPS | Damage |
-|------|----------|-----|--------|
-| `01_tubbs-fire_66-destroyed.png` | Santa Rosa, CA | 38.4404, -122.7141 | 🔴 66 destroyed |
-| `04_hurricane-harvey_39-major.png` | Houston, TX | 29.7604, -95.3698 | 🟠 39 major |
-| `07_hurricane-florence_48-major.png` | Wilmington, NC | 34.2257, -78.0447 | 🟠 48 major |
-| `09_hurricane-michael_20-minor.png` | Panama City, FL | 30.1588, -85.6602 | 🟡 20 minor |
-
-Upload any of these to test damage detection in the app.
-
----
-
 ## Project Structure
 
 ```
@@ -130,7 +115,7 @@ PathFinder/
 │   ├── images/           # Best-damaged satellite samples
 │   ├── satellite_collection.py  # Image catalog & gallery
 │   └── test_model.py     # Model validation script
-└── demo.py               # Full pipeline demo
+
 ```
 
 ---
