@@ -1,4 +1,4 @@
-# SafeRoute v3 — Satellite-Based Disaster Navigation System
+# PathFinder v3 — Satellite-Based Disaster Navigation System
 
 ## Project Idea
 
@@ -8,9 +8,9 @@ When a natural disaster strikes — an earthquake, hurricane, volcanic eruption 
 
 ### The Solution
 
-**SafeRoute** is a real-time disaster navigation and situational awareness platform that uses satellite imagery, AI-driven damage detection, and open-source routing to assist NGOs operating in disaster zones.
+**PathFinder** is a real-time disaster navigation and situational awareness platform that uses satellite imagery, AI-driven damage detection, and open-source routing to assist NGOs operating in disaster zones.
 
-1. **See the Damage** — A YOLO11s-seg instance segmentation model scans post-disaster satellite images and identifies every damaged building with **exact polygon footprints**, classifying them by severity: _no damage_, _minor_, _major_, or _destroyed_.
+1. **See the Damage** — A YOLO26m-seg instance segmentation model scans post-disaster satellite images and identifies every damaged building with **exact polygon footprints**, classifying them by severity: _no damage_, _minor_, _major_, or _destroyed_.
 2. **Map the Danger** — Those detections are geo-referenced and projected onto a **satellite map** (MapLibre GL JS) as color-coded GeoJSON danger zones (green → yellow → orange → red), giving volunteers an instant tactical overview.
 3. **Route Around Danger** — The geo-referenced danger polygons are injected as **`exclude_polygons`** into the **Valhalla** open-source routing engine, which computes the safest route on **real road networks** — not pixel grids.
 
@@ -30,10 +30,10 @@ The result: a volunteer uploads a satellite image, sees exactly where the destru
 
 ```mermaid
 flowchart LR
-    A[📸 Satellite Image] --> B[🤖 YOLO11s-seg]
+    A[📸 Satellite Image] --> B[🤖 YOLO26m-seg]
     B --> C[🔺 Damage Polygons<br/>pixel-space masks]
-    C --> D[🌍 Geo-reference<br/>pixel → lat/lng]
-    D --> E[⚠️ GeoJSON Danger Zones]
+    C --> D[🌍 Geo-reference<br/>RDP + Equirectangular]
+    D --> E[⚠️ GeoJSON Danger Zones<br/>Union + Validate]
     E --> F[🛣️ Valhalla Routing<br/>exclude_polygons]
     F --> G[✅ Safe Route<br/>real road directions]
     E --> H[🗺️ MapLibre GL JS<br/>satellite + overlays]
@@ -54,44 +54,96 @@ flowchart LR
 
 ---
 
-## Team Structure and Responsibilities
+## Infrastructure
 
-### You (AI and Pathfinding Lead)
+### ASUS Ascent GX10 (NVIDIA DGX Spark)
 
-**Scope**: The brain of the system — the damage detection model.
-
-| Responsibility | Details |
+| Spec | Value |
 |:--|:--|
-| **Dataset preparation** | Convert xView2 GeoJSON labels to YOLO segmentation format. Convert **both** pre- and post-disaster to avoid bias |
-| **Model fine-tuning** | Fine-tune YOLO11s-seg on xView2, tune hyperparameters, validate mask mAP |
-| **Mask quality** | Ensure output polygons are clean (no self-intersections), suitable for geo-referencing |
-| **Model serving** | Package `best.pt` so the backend can call it for inference |
-| **Demo images** | Prepare 2–3 pre-processed demo images with known geo-locations |
+| **Chip** | NVIDIA GB10 Grace Blackwell Superchip |
+| **GPU** | Integrated Blackwell (1 petaFLOP / 1000 TOPS FP4) |
+| **RAM** | 128 GB unified LPDDR5x |
+| **Disk** | 916 GB NVMe (835 GB free) |
+| **CUDA** | 13.0, Driver 580.126.09 |
+| **OS** | Ubuntu Linux (DGX Spark 7.4.0), aarch64 |
+| **Network** | Connected via laptop hotspot at `192.168.137.117` |
 
-> **Note**: The custom A\* pathfinding module is **no longer needed**. Valhalla handles all routing. Your focus shifts entirely to maximizing YOLO mask accuracy.
+**Runs**: YOLO training (GPU) + Valhalla routing engine (Docker, CPU)
 
-**Deliverables**: Trained `best.pt` weights, `convert_xview2_to_yolo_seg.py` script, 3 demo images with geo-coordinates
+### Valhalla on DGX Spark
+
+```bash
+# On GX10:
+mkdir -p ~/valhalla_data && cd ~/valhalla_data
+wget https://download.geofabrik.de/central-america-latest.osm.pbf
+docker run -dt --name valhalla -p 8002:8002 \
+  -v ~/valhalla_data:/custom_files \
+  ghcr.io/gis-ops/docker-valhalla/valhalla:latest
+```
+
+Valhalla API available at: `http://192.168.137.117:8002`
 
 ---
 
-### Person A — Backend Engineer
+## Team Structure and Responsibilities
 
-**Scope**: The spine — API layer, geo-referencing pipeline, Valhalla integration, and database.
+### You (AI Lead + Backend)
+
+**Scope**: The brain (damage detection model) AND the spine (API layer).
+
+#### AI Responsibilities — ✅ DONE / IN PROGRESS
+
+| Responsibility | Status |
+|:--|:--|
+| **Dataset preparation** | ✅ Converted xView2 → YOLO seg format (4,524 images, 322K buildings) |
+| **Model fine-tuning** | 🔄 Training YOLO26m-seg on DGX Spark (will export `best.pt`) |
+| **Mask quality** | Pending — validate after training completes |
+| **Demo images** | Pending — prepare 2–3 with known geo-locations |
+
+#### Backend Responsibilities — TODO
 
 | Responsibility | Details |
 |:--|:--|
-| **FastAPI server** | Build and maintain `main.py` with all API endpoints |
-| **`POST /detect`** | Accept image upload, call YOLO model, return pixel-space detections |
-| **`POST /georef`** | **NEW**: Convert pixel masks → GeoJSON lat/lng polygons using anchor + scale |
-| **`POST /route`** | **Revised**: Call Valhalla with `exclude_polygons` for danger avoidance |
+| **FastAPI server** | Build `main.py` with CORS, all endpoints |
+| **`POST /detect`** | Stub first → wire to `best.pt` when ready |
+| **`POST /georef`** | 4 geometry algorithms (see below) |
+| **`POST /route`** | Call Valhalla at `192.168.137.117:8002` with `exclude_polygons` |
 | **`CRUD /missions`** | Save/load missions to Supabase |
-| **Valhalla integration** | Configure Valhalla API (hosted or Docker), handle `exclude_polygons` |
-| **Database schema** | Supabase `missions` table |
 | **Error handling** | Input validation, graceful error responses |
 
 **Tech**: Python, FastAPI, Pydantic v2, httpx, Shapely, Supabase, Valhalla API
 
-**Deliverables**: Working API server with all endpoints, Valhalla integration, Supabase schema
+**Deliverables**: Trained `best.pt`, working API server, Valhalla integration
+
+---
+
+## The 4 Critical Geometry Algorithms
+
+YOLO outputs **raster masks** (pixel grids). Valhalla expects **vector coordinates** (lat/lng polygons). These algorithms bridge the gap in `POST /georef`:
+
+### A. Mask-to-Polygon Extraction (`detect.py`)
+
+- Ultralytics `results[0].masks.xy` extracts polygon vertices directly
+- Fallback: Suzuki's Algorithm via `cv2.findContours` for raw tensors
+
+### B. Polygon Simplification — Ramer-Douglas-Peucker (`georef.py`)
+
+- YOLO masks have thousands of jagged vertices → Valhalla will choke
+- `poly.simplify(tolerance=2.0, preserve_topology=True)` reduces by ~90%
+
+### C. Spatial Translation — Equirectangular Approximation (`georef.py`)
+
+```python
+dx_meters = (px_x - center_x) * scale
+dy_meters = (center_y - px_y) * scale  # Y is flipped
+lat = anchor_lat + (dy_meters / 111_320)
+lng = anchor_lng + (dx_meters / (111_320 * cos(radians(anchor_lat))))
+```
+
+### D. Polygon Union — Cascaded Boolean Union (`georef.py`)
+
+- Overlapping danger zones cause Valhalla graph-cutting errors
+- `shapely.ops.unary_union(polygons)` dissolves overlaps into clean features
 
 ---
 
@@ -245,8 +297,8 @@ sequenceDiagram
     participant U as User (Browser)
     participant F as Frontend (MapLibre GL JS)
     participant B as Backend (FastAPI)
-    participant AI as YOLO11s-seg Model
-    participant V as Valhalla Routing Engine
+    participant AI as YOLO26m-seg Model
+    participant V as Valhalla (DGX Spark :8002)
 
     U->>F: Upload satellite image + click anchor on map
     F->>B: POST /detect (image)
@@ -268,31 +320,33 @@ sequenceDiagram
 
 ---
 
-## Phased Timeline (2-Day Hackathon)
+## Phased Timeline
 
-### Phase 1 — Foundation (Day 1, first half)
+### Phase 1 — Stubs + Scaffold (NOW, ~45 min)
 
-| You (AI) | Person A (Backend) | Person B (Frontend) |
-|:--|:--|:--|
-| Run `convert_xview2_to_yolo.py` | Scaffold FastAPI project | Scaffold Next.js project |
-| Start YOLO training | Create stub `/detect` endpoint | Set up MapLibre GL JS + satellite tiles |
-| Draft `data.yaml` | Test Valhalla API connectivity | Build `ImageUpload.tsx` |
+| You (AI + Backend) | Person B (Frontend) |
+|:--|:--|
+| ✅ Dataset converted (4,524 images) | Scaffold Next.js project |
+| 🔄 YOLO26m-seg training on DGX Spark | Set up MapLibre GL JS + satellite tiles |
+| Build FastAPI scaffold + stub endpoints | Build `ImageUpload.tsx` |
+| Stub `/detect`, `/georef`, `/route` (mock data) | Wire upload → `/detect` → render |
 
-### Phase 2 — Core Integration (Day 1, second half)
+### Phase 2 — Geo-referencing + Valhalla (~1.5 hr)
 
-| You (AI) | Person A (Backend) | Person B (Frontend) |
-|:--|:--|:--|
-| Validate training metrics | Wire `/detect` to real YOLO model | Wire upload → `/detect` → render detections |
-| Ensure clean mask polygons | Build `POST /georef` endpoint | Build `DangerLayer.tsx` (GeoJSON fills) |
-| Prepare demo image geo-coords | Build `POST /route` with Valhalla | Build `RouteLayer.tsx` + click markers |
+| You (AI + Backend) | Person B (Frontend) |
+|:--|:--|
+| Implement real `/georef` (RDP + equirectangular + union) | Build `DangerLayer.tsx` (GeoJSON fills) |
+| Set up Valhalla on DGX Spark (Docker) | Build `RouteLayer.tsx` + click markers |
+| Implement real `/route` with Valhalla | Sidebar controls, transport mode |
 
-### Phase 3 — Polish and Demo Prep (Day 2)
+### Phase 3 — Real Model + Polish
 
-| You (AI) | Person A (Backend) | Person B (Frontend) |
-|:--|:--|:--|
-| Tune model, improve mAP | Error handling, input validation | Dashboard with saved missions |
-| Pre-process 3 demo images | `/missions` CRUD endpoints | Map/Satellite toggle, sidebar polish |
-| Test full pipeline end-to-end | Deploy API (Railway / Render) | Final UX polish, responsive layout |
+| You (AI + Backend) | Person B (Frontend) |
+|:--|:--|
+| Export `best.pt`, wire real `/detect` | Dashboard with saved missions |
+| Set up Supabase + `/missions` CRUD | Map/Satellite toggle, sidebar polish |
+| Pre-process 3 demo images | Final UX polish, responsive layout |
+| Test full pipeline end-to-end | Loading states, animations |
 
 ---
 
