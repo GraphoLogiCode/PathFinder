@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     supabase_key: str = ""
     model_path: str = "../ai/weights/best.pt"
     valhalla_url: str = "http://192.168.137.117:8002"
+    openai_api_key: str = ""
     max_upload_size_mb: int = 20
 
 

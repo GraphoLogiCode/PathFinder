@@ -8,12 +8,12 @@ and exposes a /health check.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import detect, georef, route, missions
+from app.routes import detect, georef, route, missions, analyze, detect_region
 
 app = FastAPI(
     title="PathFinder API",
     description="Satellite-based disaster navigation — safe routing around danger zones",
-    version="0.1.0",
+    version="3.0.0",
     redirect_slashes=True,
 )
 
@@ -32,8 +32,10 @@ app.add_middleware(
 # Register routers
 # ---------------------------------------------------------------------------
 app.include_router(detect.router, tags=["Detection"])
+app.include_router(detect_region.router, tags=["Region Detection"])
 app.include_router(georef.router, tags=["Geo-Referencing"])
 app.include_router(route.router, tags=["Routing"])
+app.include_router(analyze.router, tags=["AI Analysis"])
 app.include_router(missions.router, tags=["Missions"])
 
 

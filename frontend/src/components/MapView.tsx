@@ -7,6 +7,8 @@ import { SATELLITE_STYLE, STREET_STYLE } from "@/lib/mapStyle";
 interface Props {
   onMapClick?: (lng: number, lat: number, x?: number, y?: number) => void;
   onMoveEnd?: (lng: number, lat: number) => void;
+  initialCenter?: [number, number]; // [lng, lat]
+  initialZoom?: number;
   children?: React.ReactNode;
 }
 
@@ -62,7 +64,7 @@ const MapIcon = () => (
   </svg>
 );
 
-export default function MapView({ onMapClick, onMoveEnd, children }: Props) {
+export default function MapView({ onMapClick, onMoveEnd, initialCenter, initialZoom, children }: Props) {
   const mapRef = useRef<MapRef>(null);
   const [isSatellite, setIsSatellite] = useState(true);
   const hasClickedMap = useRef(false);
@@ -95,10 +97,15 @@ export default function MapView({ onMapClick, onMoveEnd, children }: Props) {
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
       <Map
         ref={mapRef}
-        initialViewState={{ longitude: -90.88, latitude: 14.47, zoom: 13 }}
+        initialViewState={{ longitude: initialCenter?.[0] ?? -90.88, latitude: initialCenter?.[1] ?? 14.47, zoom: initialZoom ?? 13 }}
         mapStyle={isSatellite ? SATELLITE_STYLE : STREET_STYLE}
         onClick={handleClick}
         onMoveEnd={(e) => onMoveEnd?.(e.viewState.longitude, e.viewState.latitude)}
+        onLoad={() => {
+          if (mapRef.current) {
+            (window as any).__pathfinderMap = mapRef.current.getMap();
+          }
+        }}
         style={{ width: "100%", height: "100%" }}
       >
         {children}

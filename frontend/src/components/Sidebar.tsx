@@ -4,16 +4,6 @@ import { calculateRoute, saveMission } from "@/lib/api";
 import Link from "next/link";
 import Logo from "@/components/Logo";
 
-/* ── Thumbnail placeholders (Half-Earth category card images) ─────────── */
-const DAMAGE_THUMB =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='56' viewBox='0 0 72 56'%3E%3Crect width='72' height='56' fill='%23162030'/%3E%3Ccircle cx='36' cy='28' r='16' fill='none' stroke='%2300a896' stroke-width='2'/%3E%3Cline x1='36' y1='12' x2='36' y2='44' stroke='%2300a896' stroke-width='2'/%3E%3Cline x1='20' y1='28' x2='52' y2='28' stroke='%2300a896' stroke-width='2'/%3E%3C/svg%3E";
-
-const ROUTE_THUMB =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='56' viewBox='0 0 72 56'%3E%3Crect width='72' height='56' fill='%231a2a1f'/%3E%3Cpath d='M10 46 Q24 20 36 28 Q48 36 62 10' stroke='%2300a896' fill='none' stroke-width='2.5' stroke-linecap='round'/%3E%3Ccircle cx='10' cy='46' r='4' fill='%2322c55e'/%3E%3Ccircle cx='62' cy='10' r='4' fill='%23ef4444'/%3E%3C/svg%3E";
-
-const TRANSPORT_THUMB =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='56' viewBox='0 0 72 56'%3E%3Crect width='72' height='56' fill='%231e2233'/%3E%3Ccircle cx='25' cy='32' r='6' fill='none' stroke='%2300a896' stroke-width='2'/%3E%3Ccircle cx='47' cy='32' r='6' fill='none' stroke='%2300a896' stroke-width='2'/%3E%3Cpath d='M19 32 L25 22 L47 22 L53 32' stroke='%2300a896' fill='none' stroke-width='2'/%3E%3C/svg%3E";
-
 type TransportMode = "pedestrian" | "auto" | "bicycle";
 
 interface Props {
@@ -26,7 +16,21 @@ interface Props {
   route: any;
   onRouteCalculated: (route: any) => void;
   onClearMarkers: () => void;
+  onResetStart: () => void;
+  onResetEnd: () => void;
+  onAnalyzeRegion: () => void;
+  isSelectingRegion: boolean;
+  isAnalyzingRegion: boolean;
+  onGenerateRescuePlan: (severity: string) => void;
 }
+
+/* ── Damage level config ─────────────────────────────────────────────────── */
+const DAMAGE_LEVELS = [
+  { key: "no-damage", label: "No Damage", color: "#22c55e", icon: "🟢" },
+  { key: "minor-damage", label: "Minor Damage", color: "#eab308", icon: "🟡" },
+  { key: "major-damage", label: "Major Damage", color: "#f97316", icon: "🟠" },
+  { key: "destroyed", label: "Destroyed", color: "#ef4444", icon: "🔴" },
+];
 
 export default function Sidebar({
   detectionCount,
@@ -38,8 +42,13 @@ export default function Sidebar({
   route,
   onRouteCalculated,
   onClearMarkers,
+  onResetStart,
+  onResetEnd,
+  onAnalyzeRegion,
+  isSelectingRegion,
+  isAnalyzingRegion,
+  onGenerateRescuePlan,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<"layers" | "route">("layers");
   const [mode, setMode] = useState<TransportMode>("pedestrian");
   const [routing, setRouting] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -59,6 +68,16 @@ export default function Sidebar({
     }
   };
 
+  /* ── Count detections per severity class ────────────────────────────────── */
+  const severityCounts: Record<string, number> = {};
+  if (dangerZones?.features) {
+    for (const f of dangerZones.features) {
+      const sev = f.properties?.severity ?? "unknown";
+      severityCounts[sev] = (severityCounts[sev] || 0) + 1;
+    }
+  }
+  const hasDamageData = Object.keys(severityCounts).length > 0;
+
   return (
     <div
       className="sidebar-panel"
@@ -71,181 +90,268 @@ export default function Sidebar({
       }}
     >
       {/* ── Logo header ─────────────────────────────────────────────────── */}
-      <div
-        style={{
-          padding: "16px 18px 0",
-          borderBottom: "1px solid var(--border-subtle)",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+      <div style={{ padding: "16px 18px 12px", borderBottom: "1px solid var(--border-subtle)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <Logo size={26} className="text-zinc-100 hover:text-[var(--accent)] transition-colors cursor-pointer" />
-            <Link
-              href="/"
-              style={{
-                fontFamily: "var(--font-heading)",
-                fontSize: 30, // text-3xl
-                fontWeight: 600,
-                color: "var(--text-primary)",
-                textDecoration: "none",
-                letterSpacing: "-0.025em",
-              }}
-            >
+            <Link href="/" style={{ fontFamily: "var(--font-heading)", fontSize: 28, fontWeight: 600, color: "var(--text-primary)", textDecoration: "none", letterSpacing: "-0.025em" }}>
               PathFinder
             </Link>
           </div>
-          <span
-            style={{
-              fontSize: 10,
-              fontWeight: 600,
-              letterSpacing: "0.1em",
-              textTransform: "uppercase",
-              color: "var(--text-faint)",
-              padding: "2px 7px",
-              border: "1px solid var(--border-subtle)",
-              borderRadius: 2,
-            }}
-          >
+          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(255,255,255,0.6)", padding: "3px 8px", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 3 }}>
             Mission
           </span>
         </div>
-
-        {/* ── Tab bar (Half-Earth style) ─────────────────────────────────── */}
-        <div style={{ display: "flex" }}>
-          <button
-            className={`sidebar-tab ${activeTab === "layers" ? "active" : ""}`}
-            onClick={() => setActiveTab("layers")}
-          >
-            ◈ Map Layers
-          </button>
-          <button
-            className={`sidebar-tab ${activeTab === "route" ? "active" : ""}`}
-            onClick={() => setActiveTab("route")}
-          >
-            ◎ Route Setup
-          </button>
-        </div>
       </div>
 
-      {/* ── Tab: Map Layers ──────────────────────────────────────────────── */}
-      {activeTab === "layers" && (
-        <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }} className="animate-fade-up">
-          {/* Damage Scale card */}
-          <div className="category-card" style={{ margin: "6px 0", borderRadius: 0, borderLeft: "none", borderRight: "none" }}>
-            <img
-              src={DAMAGE_THUMB}
-              alt="Damage Scale"
-              className="category-card-thumb"
-            />
-            <span className="category-card-title">Damage Scale</span>
-            {detectionCount > 0 && (
-              <div className="accent-badge">{detectionCount}</div>
+      {/* ── Scrollable content ──────────────────────────────────────────── */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "0" }}>
+
+        {/* ── Section: Waypoints ──────────────────────────────────────────── */}
+        <div style={{ padding: "16px 18px", borderBottom: "1px solid var(--border-subtle)" }}>
+          <p style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(255,255,255,0.85)", marginBottom: 14 }}>
+            📍 Waypoints
+          </p>
+
+          {/* Start */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 10, height: 10, borderRadius: "50%", background: start ? "#22c55e" : "rgba(255,255,255,0.15)", border: start ? "none" : "1px dashed rgba(255,255,255,0.2)", boxShadow: start ? "0 0 8px rgba(34,197,94,0.4)" : "none" }} />
+              <div>
+                <p style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Start</p>
+                <p style={{ fontSize: 14, color: start ? "#22c55e" : "rgba(255,255,255,0.4)", fontFamily: start ? "monospace" : "var(--font-sans)", fontWeight: 500 }}>
+                  {start ? `${start[1].toFixed(5)}, ${start[0].toFixed(5)}` : "Click map to set"}
+                </p>
+              </div>
+            </div>
+            {start && (
+              <button onClick={onResetStart} style={{ background: "none", border: "none", color: "var(--text-faint)", cursor: "pointer", fontSize: 14, padding: "2px 6px", borderRadius: 4, transition: "color 0.2s" }}
+                onMouseEnter={e => e.currentTarget.style.color = "#22c55e"}
+                onMouseLeave={e => e.currentTarget.style.color = "var(--text-faint)"}
+              >✕</button>
             )}
           </div>
 
-          {/* Damage legend (expandable under card) */}
-          <div style={{ padding: "10px 18px 4px", borderBottom: "1px solid var(--border-subtle)" }}>
-            {[
-              { label: "No Damage",    color: "#22c55e" },
-              { label: "Minor Damage", color: "#eab308" },
-              { label: "Major Damage", color: "#f97316" },
-              { label: "Destroyed",    color: "#ef4444" },
-            ].map(({ label, color }) => (
-              <div 
-                key={label} 
-                style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, transition: "transform 0.2s, filter 0.2s" }}
-                onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.02) translateX(4px)"; e.currentTarget.style.filter = "brightness(1.15)"; }}
-                onMouseLeave={e => { e.currentTarget.style.transform = "scale(1) translateX(0)"; e.currentTarget.style.filter = "brightness(1)"; }}
-              >
-                <div style={{ width: 12, height: 12, borderRadius: 2, background: color, flexShrink: 0, boxShadow: `0 0 8px ${color}` }} />
-                <span style={{ fontSize: 13, color: "var(--text-muted)", transition: "color 0.2s" }}>{label}</span>
+          {/* End */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 10, height: 10, borderRadius: "50%", background: end ? "#ef4444" : "rgba(255,255,255,0.15)", border: end ? "none" : "1px dashed rgba(255,255,255,0.2)", boxShadow: end ? "0 0 8px rgba(239,68,68,0.4)" : "none" }} />
+              <div>
+                <p style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Destination</p>
+                <p style={{ fontSize: 14, color: end ? "#ef4444" : "rgba(255,255,255,0.4)", fontFamily: end ? "monospace" : "var(--font-sans)", fontWeight: 500 }}>
+                  {end ? `${end[1].toFixed(5)}, ${end[0].toFixed(5)}` : "Click map to set"}
+                </p>
               </div>
-            ))}
-          </div>
-
-          {/* Mission Status card */}
-          <div className="category-card" style={{ margin: "6px 0", borderRadius: 0, borderLeft: "none", borderRight: "none" }}>
-            <img
-              src={ROUTE_THUMB}
-              alt="MISSION CONTROL"
-              className="category-card-thumb"
-            />
-            <span className="category-card-title">MISSION CONTROL</span>
-          </div>
-
-          {/* Status detail */}
-          <div style={{ padding: "16px 18px", borderBottom: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", gap: 16 }}>
-            {[
-              { label: "START",       value: start ? `${start[1].toFixed(5)}, ${start[0].toFixed(5)}` : "Click on map", color: start ? "#22c55e" : "var(--text-faint)" },
-              { label: "DESTINATION", value: end   ? `${end[1].toFixed(5)}, ${end[0].toFixed(5)}`     : "Click on map", color: end   ? "#ef4444" : "var(--text-faint)" },
-              { label: "DETECTIONS",  value: `${detectionCount} detected`, color: "var(--text-primary)" },
-            ].map(({ label, value, color }) => (
-              <div key={label} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <span style={{ fontSize: 11, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</span>
-                <span style={{ fontSize: 13, color, fontFamily: (label !== "DETECTIONS" && value !== "Click on map") ? "var(--font-mono, monospace)" : "var(--font-sans)" }}>{value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── Tab: Route Setup ─────────────────────────────────────────────── */}
-      {activeTab === "route" && (
-        <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }} className="animate-fade-up">
-          {/* Transport Mode card */}
-          <div className="category-card" style={{ margin: "6px 0", borderRadius: 0, borderLeft: "none", borderRight: "none" }}>
-            <img
-              src={TRANSPORT_THUMB}
-              alt="Transport Mode"
-              className="category-card-thumb"
-            />
-            <span className="category-card-title">Transport Mode</span>
-          </div>
-
-          {/* Mode selector */}
-          <div style={{ padding: "12px 18px", borderBottom: "1px solid var(--border-subtle)" }}>
-            <div style={{ display: "flex", gap: 8 }}>
-              {([
-                { id: "pedestrian", label: "Walk",  emoji: "🚶" },
-                { id: "auto",       label: "Drive", emoji: "🚗" },
-                { id: "bicycle",    label: "Bike",  emoji: "🚴" },
-              ] as { id: TransportMode; label: string; emoji: string }[]).map(({ id, label, emoji }) => (
-                <button
-                  key={id}
-                  onClick={() => setMode(id)}
-                  className={`mode-btn${mode === id ? " active" : ""}`}
-                >
-                  <div>{emoji}</div>
-                  <div style={{ marginTop: 3 }}>{label}</div>
-                </button>
-              ))}
             </div>
+            {end && (
+              <button onClick={onResetEnd} style={{ background: "none", border: "none", color: "var(--text-faint)", cursor: "pointer", fontSize: 14, padding: "2px 6px", borderRadius: 4, transition: "color 0.2s" }}
+                onMouseEnter={e => e.currentTarget.style.color = "#ef4444"}
+                onMouseLeave={e => e.currentTarget.style.color = "var(--text-faint)"}
+              >✕</button>
+            )}
           </div>
 
-          {/* Waypoints */}
-          <div style={{ padding: "12px 18px", borderBottom: "1px solid var(--border-subtle)" }}>
-            <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-faint)", marginBottom: 10 }}>
-              Waypoints
-            </p>
-            {[
-              { label: "Origin",      value: start ? `${start[1].toFixed(5)}, ${start[0].toFixed(5)}` : "Tap map to set", color: "#22c55e", dot: true },
-              { label: "Destination", value: end   ? `${end[1].toFixed(5)}, ${end[0].toFixed(5)}`     : "Tap map to set", color: "#ef4444", dot: true },
-            ].map(({ label, value, color, dot }) => (
-              <div key={label} style={{ marginBottom: 10 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-                  {dot && <div style={{ width: 8, height: 8, borderRadius: "50%", background: color }} />}
-                  <span style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</span>
-                </div>
-                <p style={{ fontSize: 12, color: "var(--text-muted)", fontFamily: "monospace", paddingLeft: 14 }}>{value}</p>
-              </div>
+          {/* Reset all */}
+          {(start || end) && (
+            <button
+              onClick={onClearMarkers}
+              style={{
+                width: "100%",
+                padding: "6px 0",
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 4,
+                color: "rgba(255,255,255,0.6)",
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: "pointer",
+                transition: "all 0.2s",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.2)"; e.currentTarget.style.color = "var(--text-muted)"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "var(--text-faint)"; }}
+            >
+              Reset All Points
+            </button>
+          )}
+        </div>
+
+        {/* ── Section: Transport Mode ────────────────────────────────────── */}
+        <div style={{ padding: "16px 18px", borderBottom: "1px solid var(--border-subtle)" }}>
+          <p style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(255,255,255,0.85)", marginBottom: 12 }}>
+            🚶 Transport Mode
+          </p>
+          <div style={{ display: "flex", gap: 8 }}>
+            {([
+              { id: "pedestrian", label: "Walk", emoji: "🚶" },
+              { id: "auto", label: "Drive", emoji: "🚗" },
+              { id: "bicycle", label: "Bike", emoji: "🚴" },
+            ] as { id: TransportMode; label: string; emoji: string }[]).map(({ id, label, emoji }) => (
+              <button
+                key={id}
+                onClick={() => setMode(id)}
+                className={`mode-btn${mode === id ? " active" : ""}`}
+              >
+                <div>{emoji}</div>
+                <div style={{ marginTop: 3 }}>{label}</div>
+              </button>
             ))}
           </div>
         </div>
-      )}
+
+        {/* ── Section: Region Analysis ────────────────────────────────────── */}
+        <div style={{ padding: "16px 18px", borderBottom: "1px solid var(--border-subtle)" }}>
+          <p style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(255,255,255,0.85)", marginBottom: 12 }}>
+            🎯 Region Analysis
+          </p>
+          <button
+            onClick={onAnalyzeRegion}
+            disabled={isAnalyzingRegion}
+            style={{
+              width: "100%",
+              padding: "10px 16px",
+              borderRadius: 6,
+              border: isSelectingRegion ? "2px solid var(--accent)" : "1px solid rgba(255,255,255,0.12)",
+              background: isSelectingRegion
+                ? "rgba(0, 168, 150, 0.15)"
+                : isAnalyzingRegion
+                ? "rgba(0, 168, 150, 0.1)"
+                : "rgba(255,255,255,0.04)",
+              color: isSelectingRegion ? "var(--accent)" : "rgba(255,255,255,0.8)",
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: isAnalyzingRegion ? "wait" : "pointer",
+              transition: "all 0.2s ease",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+            }}
+          >
+            {isAnalyzingRegion ? (
+              <>⏳ Analyzing with YOLO...</>
+            ) : isSelectingRegion ? (
+              <>✋ Click &amp; drag on map</>
+            ) : (
+              <>🛰️ Select Region to Analyze</>
+            )}
+          </button>
+          <p style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 6, textAlign: "center" }}>
+            Draw a box on the map to run AI damage detection
+          </p>
+        </div>
+
+        {/* ── Section: Damage Warning Summary ────────────────────────────── */}
+        <div style={{ padding: "16px 18px", borderBottom: "1px solid var(--border-subtle)" }}>
+          <p style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(255,255,255,0.85)", marginBottom: 14 }}>
+            ⚠️ Damage Analysis
+          </p>
+
+          {hasDamageData ? (
+            <>
+              {/* Warning level bars */}
+              {DAMAGE_LEVELS.map(({ key, label, color, icon }) => {
+                const count = severityCounts[key] || 0;
+                const pct = detectionCount > 0 ? (count / detectionCount) * 100 : 0;
+                return (
+                  <div
+                    key={key}
+                    style={{ marginBottom: 12, transition: "transform 0.2s" }}
+                    onMouseEnter={e => e.currentTarget.style.transform = "translateX(2px)"}
+                    onMouseLeave={e => e.currentTarget.style.transform = "translateX(0)"}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 14 }}>{icon}</span>
+                        <span style={{ fontSize: 14, fontWeight: 500, color: count > 0 ? color : "rgba(255,255,255,0.4)" }}>{label}</span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: count > 0 ? color : "rgba(255,255,255,0.3)", fontFamily: "monospace" }}>
+                          {count}
+                        </span>
+                        {count > 0 && (
+                          <button
+                            onClick={() => onGenerateRescuePlan(key)}
+                            style={{
+                              background: `${color}18`,
+                              border: `1px solid ${color}40`,
+                              borderRadius: 4,
+                              color: color,
+                              fontSize: 10,
+                              fontWeight: 600,
+                              padding: "3px 8px",
+                              cursor: "pointer",
+                              transition: "all 0.2s",
+                              whiteSpace: "nowrap",
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.background = `${color}30`; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = `${color}18`; }}
+                          >
+                            Plan →
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {/* Progress bar */}
+                    <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+                      <div style={{
+                        height: "100%",
+                        width: `${pct}%`,
+                        background: color,
+                        borderRadius: 2,
+                        boxShadow: count > 0 ? `0 0 8px ${color}40` : "none",
+                        transition: "width 0.5s cubic-bezier(0.16, 1, 0.3, 1)",
+                      }} />
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Total */}
+              <div style={{
+                marginTop: 12,
+                padding: "8px 10px",
+                background: "rgba(0, 168, 150, 0.08)",
+                borderRadius: 4,
+                border: "1px solid rgba(0, 168, 150, 0.15)",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}>
+                <span style={{ fontSize: 14, color: "rgba(255,255,255,0.8)", fontWeight: 600 }}>Total Detections</span>
+                <span style={{ fontSize: 18, fontWeight: 700, color: "var(--accent)", fontFamily: "monospace" }}>{detectionCount}</span>
+              </div>
+            </>
+          ) : (
+            <div style={{ textAlign: "center", padding: "16px 0" }}>
+              <p style={{ fontSize: 14, color: "rgba(255,255,255,0.5)", marginBottom: 6 }}>No damage data yet</p>
+              <p style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>Upload a satellite image to analyze</p>
+            </div>
+          )}
+        </div>
+
+        {/* ── Section: Damage Scale Legend ────────────────────────────────── */}
+        <div style={{ padding: "16px 18px", borderBottom: "1px solid var(--border-subtle)" }}>
+          <p style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(255,255,255,0.85)", marginBottom: 12 }}>
+            Damage Scale
+          </p>
+          {DAMAGE_LEVELS.map(({ label, color }) => (
+            <div
+              key={label}
+              style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, transition: "transform 0.2s, filter 0.2s" }}
+              onMouseEnter={e => { e.currentTarget.style.transform = "translateX(4px)"; e.currentTarget.style.filter = "brightness(1.15)"; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = "translateX(0)"; e.currentTarget.style.filter = "brightness(1)"; }}
+            >
+              <div style={{ width: 14, height: 14, borderRadius: 3, background: color, flexShrink: 0, boxShadow: `0 0 6px ${color}50` }} />
+              <span style={{ fontSize: 14, color: "rgba(255,255,255,0.75)", fontWeight: 500 }}>{label}</span>
+            </div>
+          ))}
+        </div>
+
+      </div>
 
       {/* ── Footer actions ───────────────────────────────────────────────── */}
       <div style={{
-        padding: "14px 14px",
+        padding: "12px 14px",
         borderTop: "1px solid var(--border-subtle)",
         display: "flex",
         flexDirection: "column",
@@ -262,7 +368,7 @@ export default function Sidebar({
         <button
           className="btn-teal btn-teal-sticky"
           onClick={handleCalculateRoute}
-          disabled={!start || !end || routing}
+          disabled={Boolean(!start || !end || routing)}
           style={{ width: "100%" }}
         >
           {routing ? "Generating safest route…" : "Generate Safest Route"}
@@ -288,22 +394,6 @@ export default function Sidebar({
             {saving ? "Saving…" : "💾 Save Mission"}
           </button>
         )}
-
-        <button
-          className="btn-ghost"
-          disabled
-          style={{ width: "100%", opacity: 0.6 }}
-        >
-          📄 Export PDF (Offline)
-        </button>
-
-        <button
-          className="btn-ghost"
-          onClick={onClearMarkers}
-          style={{ width: "100%", color: "var(--text-faint)", fontSize: 12 }}
-        >
-          Clear All
-        </button>
       </div>
     </div>
   );

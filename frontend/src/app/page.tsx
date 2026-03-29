@@ -118,13 +118,42 @@ export default function DashboardPage() {
             Mission Location
           </label>
           <form
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
+              const input = (e.currentTarget.elements.namedItem("location") as HTMLInputElement);
+              const query = input.value.trim();
+              if (!query) return;
+
+              // Try to geocode via MapTiler
+              const key = process.env.NEXT_PUBLIC_MAPTILER_KEY || "";
+              try {
+                const res = await fetch(
+                  `https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?key=${key}&limit=1`
+                );
+                const data = await res.json();
+                if (data.features && data.features.length > 0) {
+                  const [lng, lat] = data.features[0].center;
+                  window.location.href = `/mission?lat=${lat}&lng=${lng}&q=${encodeURIComponent(query)}`;
+                  return;
+                }
+              } catch (err) {
+                console.error("Geocoding failed:", err);
+              }
+
+              // Fallback: try parsing as coordinates "lat, lng"
+              const coordMatch = query.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
+              if (coordMatch) {
+                window.location.href = `/mission?lat=${coordMatch[1]}&lng=${coordMatch[2]}&q=${encodeURIComponent(query)}`;
+                return;
+              }
+
+              // Last resort: just go to mission page
               window.location.href = "/mission";
             }}
             style={{ display: "flex", gap: 12 }}
           >
             <input
+              name="location"
               type="text"
               required
               placeholder="Search mission location (city, region, or coordinates)"

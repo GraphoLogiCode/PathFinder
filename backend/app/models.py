@@ -102,3 +102,28 @@ class Mission(MissionCreate):
     """A persisted mission, with server-generated fields."""
     id: str
     created_at: str
+
+
+# ---------------------------------------------------------------------------
+# AI Analysis (GPT-5.4-mini rescue plan)
+# ---------------------------------------------------------------------------
+
+class AnalyzeRequest(BaseModel):
+    """Request body for POST /analyze."""
+    danger_zones: dict | None = None
+    route_summary: dict | None = None
+    maneuvers: list[dict] | None = None
+    route_geometry: dict | None = None
+    start: LatLng | None = None
+    end: LatLng | None = None
+    disaster_type: str | None = None
+    disaster_location: str | None = None
+    transport_mode: str | None = "pedestrian"
+
+
+class AnalyzeResponse(BaseModel):
+    """Response from POST /analyze."""
+    plan: dict
+    model: str = "gpt-4o-mini"
+    tokens_used: int = 0
+

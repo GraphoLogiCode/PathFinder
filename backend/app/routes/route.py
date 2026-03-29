@@ -1,89 +1,132 @@
 """
 PathFinder — POST /route
 
-Phase 1 (stub): Returns a mock route as a GeoJSON LineString connecting
-start → end with an intermediate waypoint, plus fake summary data.
-
-Phase 3 (real): Proxies to Valhalla on the DGX Spark, includes polyline6
-decoding and exclude_polygons support.
+Real Valhalla routing using the public FOSSGIS demo server.
+Decodes polyline6 encoded shapes and supports exclude_polygons.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+import httpx
+from fastapi import APIRouter, HTTPException
 
+from app.config import settings
 from app.models import RouteRequest, RouteResponse
 
 router = APIRouter()
+
+# Use public Valhalla demo if local isn't available
+VALHALLA_URL = settings.valhalla_url or "https://valhalla1.openstreetmap.de"
+
+
+def decode_polyline6(encoded: str) -> list[list[float]]:
+    """Decode Valhalla's polyline6 encoded string → [[lng, lat], ...]."""
+    coords = []
+    i, lat, lng = 0, 0, 0
+    while i < len(encoded):
+        for is_lng in (False, True):
+            shift, result = 0, 0
+            while True:
+                b = ord(encoded[i]) - 63
+                i += 1
+                result |= (b & 0x1F) << shift
+                shift += 5
+                if b < 0x20:
+                    break
+            delta = ~(result >> 1) if (result & 1) else (result >> 1)
+            if is_lng:
+                lng += delta
+            else:
+                lat += delta
+        coords.append([lng / 1e6, lat / 1e6])
+    return coords
 
 
 @router.post("/route", response_model=RouteResponse)
 async def route(req: RouteRequest):
     """
     Calculate a safe route that avoids danger zones.
-
-    Phase 1: Returns a straight-line mock route.
-    Phase 3: Calls Valhalla with exclude_polygons.
+    Uses Valhalla routing engine (public demo or local instance).
     """
-    # Build a mock route — straight line from start to end with a midpoint
-    mid_lat = (req.start.lat + req.end.lat) / 2
-    mid_lng = (req.start.lng + req.end.lng) / 2
+    # Extract polygon coords from GeoJSON danger_zones
+    exclude_polygons = []
+    if req.danger_zones and req.danger_zones.get("features"):
+        for feature in req.danger_zones["features"]:
+            coords = feature["geometry"]["coordinates"]
+            exclude_polygons.append(coords)
 
-    # Slight offset to simulate route deviation around a danger zone
-    mid_lat += 0.002
-    mid_lng += 0.001
+    valhalla_body = {
+        "locations": [
+            {"lat": req.start.lat, "lon": req.start.lng},
+            {"lat": req.end.lat, "lon": req.end.lng},
+        ],
+        "costing": req.mode,
+        "directions_options": {"units": "km"},
+    }
+    if exclude_polygons:
+        valhalla_body["exclude_polygons"] = exclude_polygons
+
+    # Try local Valhalla first, fall back to public demo
+    urls_to_try = [settings.valhalla_url, "https://valhalla1.openstreetmap.de"]
+
+    data = None
+    last_error = None
+
+    for base_url in urls_to_try:
+        if not base_url:
+            continue
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(
+                    f"{base_url}/route",
+                    json=valhalla_body,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                break  # Success
+        except Exception as e:
+            last_error = e
+            continue
+
+    if data is None:
+        raise HTTPException(502, f"Valhalla routing failed: {last_error}")
+
+    # Parse Valhalla response
+    trip = data.get("trip", {})
+    legs = trip.get("legs", [{}])
+    leg = legs[0] if legs else {}
+
+    # Decode polyline6 shape → GeoJSON LineString
+    shape = leg.get("shape", "")
+    coordinates = decode_polyline6(shape) if shape else [
+        [req.start.lng, req.start.lat],
+        [req.end.lng, req.end.lat],
+    ]
 
     route_feature = {
         "type": "Feature",
-        "geometry": {
-            "type": "LineString",
-            "coordinates": [
-                [req.start.lng, req.start.lat],
-                [mid_lng, mid_lat],
-                [req.end.lng, req.end.lat],
-            ],
-        },
-        "properties": {
-            "mode": req.mode,
-        },
+        "geometry": {"type": "LineString", "coordinates": coordinates},
+        "properties": {"mode": req.mode},
     }
 
-    # Approximate distance (very rough — for stub only)
-    import math
-
-    dlat = req.end.lat - req.start.lat
-    dlng = req.end.lng - req.start.lng
-    dist_deg = math.sqrt(dlat**2 + dlng**2)
-    dist_km = dist_deg * 111.32  # rough conversion
-
-    # Estimate time based on mode
-    speed_kmh = {"pedestrian": 5, "bicycle": 15, "auto": 50}.get(req.mode, 5)
-    time_minutes = (dist_km / speed_kmh) * 60
-
-    summary = {
-        "distance_km": round(dist_km, 2),
-        "time_minutes": round(time_minutes, 1),
-        "mode": req.mode,
-        "danger_zones_avoided": 0 if not req.danger_zones else len(
-            req.danger_zones.get("features", [])
-        ),
-    }
-
+    summary = trip.get("summary", {})
     maneuvers = [
         {
-            "instruction": f"Start heading toward destination",
-            "distance_km": round(dist_km / 2, 2),
-            "type": "start",
-        },
-        {
-            "instruction": f"Arrive at destination",
-            "distance_km": round(dist_km / 2, 2),
-            "type": "arrive",
-        },
+            "instruction": m.get("instruction", ""),
+            "distance": m.get("length", 0),
+            "street_name": ", ".join(m.get("street_names", [])),
+            "type": m.get("type", 0),
+        }
+        for m in leg.get("maneuvers", [])
     ]
 
     return RouteResponse(
         route=route_feature,
-        summary=summary,
+        summary={
+            "distance_km": round(summary.get("length", 0), 2),
+            "time_minutes": round(summary.get("time", 0) / 60, 1),
+            "danger_zones_avoided": len(exclude_polygons),
+            "mode": req.mode,
+        },
         maneuvers=maneuvers,
     )

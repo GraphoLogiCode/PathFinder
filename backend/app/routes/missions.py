@@ -56,7 +56,9 @@ async def create_mission(payload: MissionCreate):
         try:
             client.table("missions").insert(mission_data).execute()
         except Exception as e:
-            raise HTTPException(status_code=503, detail=f"Supabase error: {e}")
+            # Supabase table might not exist — fall back to in-memory
+            print(f"⚠ Supabase save failed, using in-memory: {e}")
+            _memory_store.append(mission_data)
     else:
         _memory_store.append(mission_data)
 
@@ -87,12 +89,12 @@ async def list_missions():
             )
             return result.data
         except Exception as e:
-            raise HTTPException(status_code=503, detail=f"Supabase error: {e}")
-    else:
-        return [
-            {"id": m["id"], "name": m["name"], "created_at": m["created_at"]}
-            for m in sorted(_memory_store, key=lambda x: x["created_at"], reverse=True)
-        ]
+            print(f"⚠ Supabase list failed, using in-memory: {e}")
+
+    return [
+        {"id": m["id"], "name": m["name"], "created_at": m["created_at"]}
+        for m in sorted(_memory_store, key=lambda x: x["created_at"], reverse=True)
+    ]
 
 
 @router.get("/missions/{mission_id}", response_model=dict)
@@ -111,9 +113,9 @@ async def get_mission(mission_id: str):
             )
             return result.data
         except Exception as e:
-            raise HTTPException(status_code=503, detail=f"Supabase error: {e}")
-    else:
-        for m in _memory_store:
-            if m["id"] == mission_id:
-                return m
-        raise HTTPException(status_code=404, detail="Mission not found")
+            print(f"⚠ Supabase get failed, using in-memory: {e}")
+
+    for m in _memory_store:
+        if m["id"] == mission_id:
+            return m
+    raise HTTPException(status_code=404, detail="Mission not found")

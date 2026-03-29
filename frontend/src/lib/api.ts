@@ -78,3 +78,39 @@ export async function getMission(id: string) {
     if (!res.ok) throw new Error(`Mission not found: ${res.statusText}`);
     return res.json();
 }
+
+export async function analyzeArea(data: {
+    danger_zones: any;
+    route_summary?: any;
+    maneuvers?: any[];
+    route_geometry?: any;
+    start?: { lat: number; lng: number };
+    end?: { lat: number; lng: number };
+    disaster_type?: string;
+    disaster_location?: string;
+    transport_mode?: string;
+    severity_filter?: string;
+}) {
+    const res = await fetch(`${API_BASE}/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error(`Analysis failed: ${res.statusText}`);
+    return res.json();
+}
+
+export async function detectRegion(bounds: {
+    north: number;
+    south: number;
+    east: number;
+    west: number;
+}) {
+    const res = await fetch(`${API_BASE}/detect-region`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(bounds),
+    });
+    if (!res.ok) throw new Error(`Region detection failed: ${res.statusText}`);
+    return res.json();
+}

@@ -32,3 +32,24 @@ desktop.ini
 # ===== IDE =====
 .vscode/
 .idea/
+
+# Python virtual environment
+saferoute-env/
+
+# Demo outputs
+demo_output.png
+demo_geojson.json
+demo_summary.json
+
+# Next.js
+frontend/.next/
+frontend/node_modules/
+
+
+# Large binary files
+*.deb
+ai/training/*.pt
+demo_output.png
+demo_geojson.json
+demo_summary.json
+
