@@ -1,111 +1,109 @@
-# PathFinder
+# 🛰️ PathFinder
 
-PathFinder is a satellite-based disaster navigation system. It analyzes satellite imagery to detect building damage across a disaster-affected area, converts those detections into geo-referenced danger zones, and calculates pedestrian or vehicle routes that avoid those zones using a road network routing engine.
+**AI-powered disaster response navigation.** Upload satellite imagery → detect building damage → generate safe evacuation routes.
 
-The backend is a Python API built with FastAPI. A Next.js frontend is planned but not yet implemented. The AI component uses a YOLO segmentation model trained on the xView2 dataset to identify damaged buildings in satellite images.
+PathFinder analyzes post-disaster satellite images using a custom-trained YOLO segmentation model, converts damage detections into geo-referenced danger zones, and computes safe pedestrian/vehicle routes that avoid destroyed areas.
 
----
-
-## Features
-
-- Upload a satellite image and receive pixel-space damage polygon masks classified by severity (no damage, minor damage, major damage, destroyed)
-- Convert pixel-space masks to geo-referenced GeoJSON danger zones using an equirectangular projection with configurable ground sample distance
-- Calculate safe routes around danger zones via a Valhalla routing engine, supporting pedestrian, bicycle, and auto modes
-- Save and retrieve named missions (detection results, danger zones, and computed routes) via a Supabase database or an in-memory fallback
-- CORS-enabled API ready to serve a Next.js frontend
+Built for [YHacks 2026](https://yhacks.org) by **GraphoLogiCode**.
 
 ---
 
-## Requirements
-
-- Python 3.11 or later
-- A running [Valhalla](https://github.com/valhalla/valhalla) instance (optional for routing)
-- A [Supabase](https://supabase.com) project (optional for mission persistence)
-
----
-
-## Installation
-
-1. Clone the repository:
-
-   ```
-   git clone https://github.com/GraphoLogiCode/PathFinder.git
-   cd PathFinder
-   ```
-
-2. Create and activate a virtual environment:
-
-   ```
-   python -m venv .venv
-   source .venv/bin/activate      # Linux / macOS
-   .venv\Scripts\activate         # Windows
-   ```
-
-3. Install backend dependencies:
-
-   ```
-   cd backend
-   pip install -r requirements.txt
-   ```
-
----
-
-## Configuration
-
-The backend reads configuration from a `.env` file placed in the `backend/` directory. Create the file by copying the template below and filling in your values:
+## How It Works
 
 ```
-SUPABASE_URL=https://YOUR_PROJECT_ID.supabase.co
-SUPABASE_KEY=YOUR_SUPABASE_ANON_OR_SERVICE_ROLE_KEY
-MODEL_PATH=../ai/weights/best.pt
-VALHALLA_URL=http://localhost:8002
-MAX_UPLOAD_SIZE_MB=20
+Satellite Image → YOLO Detection → Geo-Referencing → Safe Routing → Rescue Plan
 ```
 
-All settings are optional. If `SUPABASE_URL` or `SUPABASE_KEY` are left empty, the backend falls back to an in-memory store. If `MODEL_PATH` does not point to a valid YOLO weights file, the detection endpoint returns pre-baked stub data instead of running live inference.
+1. **Upload** a satellite image or select a map region
+2. **AI Detection** — YOLO26m-seg identifies damaged buildings (no-damage, minor, major, destroyed)
+3. **Geo-Reference** — pixel masks → lat/lng GeoJSON danger zones
+4. **Safe Routing** — Valhalla calculates routes avoiding danger zones
+5. **Rescue Plan** — GPT-4o generates severity-specific rescue recommendations
 
 ---
 
-## Usage
+## Quick Start
 
-Start the development server from the `backend/` directory:
+```bash
+# Clone
+git clone https://github.com/GraphoLogiCode/PathFinder.git
+cd PathFinder
 
+# Backend (Python/FastAPI)
+cd backend
+pip install -r requirements.txt
+cp .env.example .env  # fill in your keys
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# Frontend (Next.js) — in a new terminal
+cd frontend
+npm install
+npm run dev
 ```
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
 
-The interactive API documentation is available at `http://localhost:8000/docs`.
+Open `http://localhost:3000` in your browser.
 
-### API endpoints
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| **AI Model** | YOLO26m-seg trained on xBD dataset (10 disaster types, 4 damage classes) |
+| **Backend** | Python, FastAPI, Shapely, OpenCV |
+| **Frontend** | Next.js, React, Mapbox GL JS |
+| **Routing** | Valhalla (self-hosted) |
+| **Database** | Supabase (PostgreSQL) |
+| **AI Analysis** | OpenAI GPT-4o-mini |
+
+---
+
+## API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | /health | Health check |
-| POST | /detect | Upload a satellite image, receive damage polygon masks |
-| POST | /georef | Convert pixel masks to a GeoJSON FeatureCollection of danger zones |
-| POST | /route | Calculate a safe route between two coordinates |
-| POST | /missions/ | Create and persist a mission |
-| GET | /missions/ | List all saved missions |
-| GET | /missions/{id} | Retrieve a mission by ID |
+| `POST` | `/detect` | Upload satellite image → damage polygon masks |
+| `POST` | `/georef` | Convert pixel masks → GeoJSON danger zones |
+| `POST` | `/route` | Calculate safe route between two points |
+| `POST` | `/analyze/rescue-plan` | Generate AI rescue plan for a severity level |
+| `POST` | `/missions/` | Save a mission |
+| `GET`  | `/missions/` | List all missions |
 
-### Example: detect damage in an image
+---
 
-```
-curl -X POST http://localhost:8000/detect \
-  -F "file=@satellite_image.png"
-```
+## Model Performance
 
-### Example: calculate a route
+Trained on the **xBD (xView2) dataset** — 10 real-world disasters across 5 countries:
 
-```
-curl -X POST http://localhost:8000/route \
-  -H "Content-Type: application/json" \
-  -d '{
-    "start": {"lat": 30.11, "lng": -85.65},
-    "end":   {"lat": 30.13, "lng": -85.63},
-    "mode":  "pedestrian"
-  }'
-```
+| Disaster | Location | Type |
+|----------|----------|------|
+| Tubbs Fire | Santa Rosa, CA | Wildfire |
+| Hurricane Harvey | Houston, TX | Category 4 Hurricane |
+| Hurricane Florence | Wilmington, NC | Category 1 Hurricane |
+| Hurricane Michael | Panama City, FL | Category 5 Hurricane |
+| Hurricane Matthew | Les Cayes, Haiti | Category 4 Hurricane |
+| Puebla Earthquake | Mexico City, Mexico | 7.1 Mw Earthquake |
+| Palu Tsunami | Palu, Indonesia | 7.5 Mw + Tsunami |
+| Volcán de Fuego | Guatemala | Volcanic Eruption |
+| Missouri River Flooding | Nebraska/Iowa, USA | River Flooding |
+| Thomas/Woolsey Fire | Ventura, CA | Wildfire |
+
+**4 damage classes:** no-damage, minor-damage, major-damage, destroyed
+
+---
+
+## Demo Images
+
+Pre-selected satellite images with confirmed damage are in `demo/images/`:
+
+| File | Location | GPS | Damage |
+|------|----------|-----|--------|
+| `01_tubbs-fire_66-destroyed.png` | Santa Rosa, CA | 38.4404, -122.7141 | 🔴 66 destroyed |
+| `04_hurricane-harvey_39-major.png` | Houston, TX | 29.7604, -95.3698 | 🟠 39 major |
+| `07_hurricane-florence_48-major.png` | Wilmington, NC | 34.2257, -78.0447 | 🟠 48 major |
+| `09_hurricane-michael_20-minor.png` | Panama City, FL | 30.1588, -85.6602 | 🟡 20 minor |
+
+Upload any of these to test damage detection in the app.
 
 ---
 
@@ -113,69 +111,50 @@ curl -X POST http://localhost:8000/route \
 
 ```
 PathFinder/
-├── ai/
-│   ├── pathfinding/        # Reserved for future custom pathfinding logic
-│   ├── scripts/            # Data processing scripts (planned)
-│   ├── training/           # Model training code (planned)
-│   └── weights/            # Trained YOLO model weights (.pt files, not committed)
-├── backend/
+├── backend/              # FastAPI server
 │   ├── app/
-│   │   ├── main.py         # FastAPI application entry point
-│   │   ├── config.py       # Settings loaded from environment variables
-│   │   ├── database.py     # Supabase client factory
-│   │   ├── models.py       # Pydantic v2 request and response schemas
-│   │   └── routes/
-│   │       ├── detect.py   # POST /detect
-│   │       ├── georef.py   # POST /georef
-│   │       ├── route.py    # POST /route
-│   │       └── missions.py # CRUD /missions
-│   ├── tests/              # Pytest test suite
-│   └── requirements.txt    # Python dependencies
-├── docs/                   # Architecture and implementation plans
-└── frontend/               # Next.js frontend (scaffolding only, not yet implemented)
+│   │   ├── main.py       # App entry point
+│   │   ├── config.py     # Environment config
+│   │   ├── models.py     # Pydantic schemas
+│   │   └── routes/       # API endpoints
+│   └── requirements.txt
+├── frontend/             # Next.js app
+│   └── src/
+│       ├── app/          # Pages (mission, etc.)
+│       ├── components/   # Map, Sidebar, DangerLayer
+│       └── lib/          # API client
+├── saferoute/
+│   ├── ai/runs/          # Trained model weights & metrics
+│   └── data/             # xBD dataset (not committed)
+├── demo/
+│   ├── images/           # Best-damaged satellite samples
+│   ├── satellite_collection.py  # Image catalog & gallery
+│   └── test_model.py     # Model validation script
+└── demo.py               # Full pipeline demo
 ```
 
 ---
 
-## Development Notes
+## Configuration
 
-- The project uses phased development. Phase 1 endpoints return pre-baked stub data derived from the xView2 dataset (actual building footprint polygons with damage class labels assigned for demonstration purposes) so the full pipeline can be exercised before the YOLO model is trained. The `/detect` endpoint always returns stub data until a trained weights file is present at `MODEL_PATH`.
-- Place your trained YOLO weights file at `ai/weights/best.pt` (or update `MODEL_PATH` in `.env`) to enable live inference in the detection endpoint.
-- The Valhalla routing engine must be running and reachable at `VALHALLA_URL` for the `/route` endpoint to return real road-network routes.
-- Damage classes and their danger weights are defined in `backend/app/models.py` under `DAMAGE_CLASSES`.
+Create `backend/.env`:
+
+```env
+MODEL_PATH=../saferoute/ai/runs/pathfinder-damage/weights/best.pt
+VALHALLA_URL=http://localhost:8002
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-key
+OPENAI_API_KEY=sk-your-key
+```
 
 ---
 
-## Testing
+## Team
 
-Tests are located in `backend/tests/` and use [pytest](https://pytest.org) with the FastAPI test client.
-
-Run the tests from the `backend/` directory:
-
-```
-pip install pytest
-pytest tests/
-```
-
-To see verbose output:
-
-```
-pytest tests/ -v
-```
-
-The test suite covers the health check, the detection endpoint, geo-referencing, and routing.
-
----
-
-## Contributing
-
-1. Fork the repository and create a feature branch from `main`.
-2. Install dependencies and confirm the test suite passes before making changes.
-3. Keep commits focused and write clear commit messages.
-4. Open a pull request describing what you changed and why.
+**GraphoLogiCode** — YHacks 2026
 
 ---
 
 ## License
 
-No license file has been added to this repository yet. Until a license is chosen and published, the source code is not available for use, modification, or distribution by third parties. If you are interested in contributing or using this project, contact the repository owner to request a license.
+MIT
