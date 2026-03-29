@@ -68,21 +68,32 @@ def run_georef(
         if poly.is_empty:
             continue
 
-        geo_coords = []
-        for x, y in poly.exterior.coords:
-            lat, lng = pixel_to_latlng(
-                x, y, center_x, center_y, anchor_lat, anchor_lng, scale
-            )
-            geo_coords.append([lng, lat])
-
-        geo_poly = Polygon(geo_coords)
-        if geo_poly.is_empty:
-            continue
+        # make_valid() may return MultiPolygon or GeometryCollection —
+        # explode into individual simple Polygons before accessing .exterior
+        if poly.geom_type == "Polygon":
+            simple_polys = [poly]
+        elif poly.geom_type in ("MultiPolygon", "GeometryCollection"):
+            simple_polys = [g for g in poly.geoms if g.geom_type == "Polygon" and not g.is_empty]
+        else:
+            continue  # LineString / Point artefact — skip
 
         cls_id = det.get("class_id", 0)
-        if cls_id not in class_features:
-            class_features[cls_id] = []
-        class_features[cls_id].append(geo_poly)
+
+        for simple_poly in simple_polys:
+            geo_coords = []
+            for x, y in simple_poly.exterior.coords:
+                lat, lng = pixel_to_latlng(
+                    x, y, center_x, center_y, anchor_lat, anchor_lng, scale
+                )
+                geo_coords.append([lng, lat])
+
+            geo_poly = Polygon(geo_coords)
+            if geo_poly.is_empty:
+                continue
+
+            if cls_id not in class_features:
+                class_features[cls_id] = []
+            class_features[cls_id].append(geo_poly)
 
     features = []
     for cls_id, polys in class_features.items():

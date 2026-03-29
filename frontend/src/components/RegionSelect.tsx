@@ -3,12 +3,18 @@ import { useState, useCallback, useRef } from "react";
 
 interface Props {
   active: boolean;
-  onRegionSelected: (bounds: { north: number; south: number; east: number; west: number }) => void;
+  onRegionSelected: (bounds: {
+    north: number; south: number; east: number; west: number;
+    imageBlob: Blob;
+    imageWidth: number;
+    imageHeight: number;
+  }) => void;
 }
 
 /**
- * Overlay on top of the map that lets the user drag a rectangle to select a region.
- * When active, intercepts mouse events and draws a selection box.
+ * Overlay on the map that lets the user drag a rectangle to select a region.
+ * Captures the selected area from the map canvas and returns it as a Blob
+ * along with the geo-bounds.
  */
 export default function RegionSelect({ active, onRegionSelected }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -18,18 +24,12 @@ export default function RegionSelect({ active, onRegionSelected }: Props) {
 
   const getMapCoords = useCallback(
     (clientX: number, clientY: number) => {
-      // Convert screen coords to lat/lng via the map canvas
-      const mapCanvas = document.querySelector(".maplibregl-canvas") as HTMLCanvasElement | null;
-      if (!mapCanvas) return null;
-
-      const rect = mapCanvas.getBoundingClientRect();
-      const x = clientX - rect.left;
-      const y = clientY - rect.top;
-
-      // Access the map instance through the global __mapRef (set in MapView)
       const map = (window as any).__pathfinderMap;
       if (!map) return null;
-
+      const canvas = map.getCanvas();
+      const rect = canvas.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
       const lngLat = map.unproject([x, y]);
       return { lat: lngLat.lat, lng: lngLat.lng };
     },
@@ -41,10 +41,8 @@ export default function RegionSelect({ active, onRegionSelected }: Props) {
       if (!active) return;
       e.preventDefault();
       e.stopPropagation();
-
       const container = containerRef.current;
       if (!container) return;
-
       const rect = container.getBoundingClientRect();
       setStartPt({ x: e.clientX - rect.left, y: e.clientY - rect.top });
       setEndPt({ x: e.clientX - rect.left, y: e.clientY - rect.top });
@@ -88,11 +86,71 @@ export default function RegionSelect({ active, onRegionSelected }: Props) {
           west: Math.min(startCoord.lng, endCoord.lng),
         };
 
-        // Only trigger if the region is large enough (not just a click)
         const latSpan = bounds.north - bounds.south;
         const lngSpan = bounds.east - bounds.west;
-        if (latSpan > 0.0005 && lngSpan > 0.0005) {
-          onRegionSelected(bounds);
+        if (latSpan > 0.0003 && lngSpan > 0.0003) {
+          // Capture the selected region from the map canvas
+          const map = (window as any).__pathfinderMap;
+          if (map) {
+            const canvas = map.getCanvas() as HTMLCanvasElement;
+            const canvasRect = canvas.getBoundingClientRect();
+            const containerRect = container.getBoundingClientRect();
+
+            // Convert container-relative coords to canvas-relative coords
+            // The RegionSelect overlay sits on <main>, but the canvas may be offset
+            const offsetX = containerRect.left - canvasRect.left;
+            const offsetY = containerRect.top - canvasRect.top;
+            const sx = Math.min(startPt.x, finalEnd.x) + offsetX;
+            const sy = Math.min(startPt.y, finalEnd.y) + offsetY;
+            const sw = Math.abs(finalEnd.x - startPt.x);
+            const sh = Math.abs(finalEnd.y - startPt.y);
+
+            // Enforce minimum region size for meaningful YOLO inference
+            if (sw < 200 || sh < 200) {
+              console.warn("[RegionSelect] Region too small for analysis:", sw, "x", sh, "px. Minimum: 200x200.");
+              setStartPt(null);
+              setEndPt(null);
+              return;
+            }
+
+            console.log("[RegionSelect] Capturing region:", {
+              containerOffset: { offsetX, offsetY },
+              crop: { sx, sy, sw, sh },
+              bounds,
+              canvasSize: { w: canvas.width, h: canvas.height },
+            });
+
+            // Account for devicePixelRatio
+            const dpr = window.devicePixelRatio || 1;
+            const cropCanvas = document.createElement("canvas");
+            cropCanvas.width = sw * dpr;
+            cropCanvas.height = sh * dpr;
+            const ctx = cropCanvas.getContext("2d");
+            if (ctx) {
+              ctx.drawImage(
+                canvas,
+                sx * dpr, sy * dpr, sw * dpr, sh * dpr,
+                0, 0, sw * dpr, sh * dpr
+              );
+              cropCanvas.toBlob((blob) => {
+                if (blob) {
+                  console.log("[RegionSelect] Captured blob:", blob.size, "bytes,", cropCanvas.width, "x", cropCanvas.height, "px");
+                  onRegionSelected({
+                    ...bounds,
+                    imageBlob: blob,
+                    imageWidth: cropCanvas.width,
+                    imageHeight: cropCanvas.height,
+                  });
+                } else {
+                  console.error("[RegionSelect] canvas.toBlob() returned null — preserveDrawingBuffer may be off");
+                }
+              }, "image/png");
+            }
+          } else {
+            console.error("[RegionSelect] window.__pathfinderMap is not set");
+          }
+        } else {
+          console.warn("[RegionSelect] Region geo-span too small:", { latSpan, lngSpan });
         }
       }
 
@@ -104,7 +162,6 @@ export default function RegionSelect({ active, onRegionSelected }: Props) {
 
   if (!active) return null;
 
-  // Calculate rectangle display
   const boxStyle: React.CSSProperties = {};
   if (startPt && endPt && dragging) {
     const left = Math.min(startPt.x, endPt.x);
@@ -113,10 +170,7 @@ export default function RegionSelect({ active, onRegionSelected }: Props) {
     const height = Math.abs(endPt.y - startPt.y);
     Object.assign(boxStyle, {
       position: "absolute" as const,
-      left,
-      top,
-      width,
-      height,
+      left, top, width, height,
       border: "2px solid rgba(0, 168, 150, 0.8)",
       background: "rgba(0, 168, 150, 0.12)",
       borderRadius: 2,
@@ -138,30 +192,25 @@ export default function RegionSelect({ active, onRegionSelected }: Props) {
         cursor: "crosshair",
       }}
     >
-      {/* Selection rectangle */}
       {startPt && endPt && dragging && <div style={boxStyle} />}
-
-      {/* Instruction overlay */}
       {!dragging && (
-        <div
-          style={{
-            position: "absolute",
-            top: 16,
-            left: "50%",
-            transform: "translateX(-50%)",
-            background: "rgba(0, 0, 0, 0.8)",
-            backdropFilter: "blur(12px)",
-            padding: "10px 20px",
-            borderRadius: 8,
-            border: "1px solid rgba(0, 168, 150, 0.3)",
-            color: "rgba(255,255,255,0.9)",
-            fontSize: 14,
-            fontWeight: 600,
-            whiteSpace: "nowrap",
-            pointerEvents: "none",
-            boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
-          }}
-        >
+        <div style={{
+          position: "absolute",
+          top: 16,
+          left: "50%",
+          transform: "translateX(-50%)",
+          background: "rgba(0, 0, 0, 0.8)",
+          backdropFilter: "blur(12px)",
+          padding: "10px 20px",
+          borderRadius: 8,
+          border: "1px solid rgba(0, 168, 150, 0.3)",
+          color: "rgba(255,255,255,0.9)",
+          fontSize: 14,
+          fontWeight: 600,
+          whiteSpace: "nowrap",
+          pointerEvents: "none",
+          boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+        }}>
           🎯 Drag to select analysis region
         </div>
       )}

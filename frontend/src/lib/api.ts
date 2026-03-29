@@ -1,9 +1,9 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-export async function detectDamage(imageFile: File) {
+export async function detectDamage(imageFile: File, source: "upload" | "region" = "upload") {
     const formData = new FormData();
     formData.append("file", imageFile); // Backend expects field name "file"
-    const res = await fetch(`${API_BASE}/detect`, { method: "POST", body: formData });
+    const res = await fetch(`${API_BASE}/detect?source=${source}`, { method: "POST", body: formData });
     if (!res.ok) throw new Error(`Detection failed: ${res.statusText}`);
     return res.json();
 }

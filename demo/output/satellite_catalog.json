@@ -1,0 +1,204 @@
+[
+  {
+    "name": "Volc\u00e1n de Fuego Eruption",
+    "date": "June 3, 2018",
+    "location": "San Miguel Los Lotes, Guatemala",
+    "lat": 14.4734,
+    "lng": -90.881,
+    "country": "Guatemala",
+    "disaster_type": "Volcanic Eruption",
+    "description": "The Volc\u00e1n de Fuego erupted violently, sending pyroclastic flows through the village of San Miguel Los Lotes.  The eruption killed over 190 people and destroyed entire communities.",
+    "emoji": "\ud83c\udf0b",
+    "source_file": "guatemala-volcano_00000000_post_disaster.png",
+    "annotated_image": "guatemala-volcano_annotated.png",
+    "image_size": "1024x1024",
+    "disaster_key": "guatemala-volcano",
+    "detected_image": "guatemala-volcano_detected.png",
+    "detections": 6,
+    "class_breakdown": {
+      "no-damage": 6
+    }
+  },
+  {
+    "name": "Hurricane Florence",
+    "date": "September 14, 2018",
+    "location": "Leland / Wilmington, North Carolina, USA",
+    "lat": 34.2257,
+    "lng": -78.0447,
+    "country": "United States",
+    "disaster_type": "Hurricane (Category 1)",
+    "description": "Hurricane Florence made landfall near Wrightsville Beach, NC as a Category 1 hurricane.  Catastrophic freshwater flooding caused over $24 billion in damage across the Carolinas.",
+    "emoji": "\ud83c\udf00",
+    "source_file": "hurricane-florence_00000048_post_disaster.png",
+    "annotated_image": "hurricane-florence_annotated.png",
+    "image_size": "1024x1024",
+    "disaster_key": "hurricane-florence",
+    "detected_image": "hurricane-florence_detected.png",
+    "detections": 20,
+    "class_breakdown": {
+      "no-damage": 4,
+      "major-damage": 16
+    }
+  },
+  {
+    "name": "Hurricane Harvey",
+    "date": "August 25, 2017",
+    "location": "Houston / Port Aransas, Texas, USA",
+    "lat": 29.7604,
+    "lng": -95.3698,
+    "country": "United States",
+    "disaster_type": "Hurricane (Category 4)",
+    "description": "Hurricane Harvey dumped over 60 inches of rain on Houston over four days \u2014 the wettest tropical cyclone on record in the US. Flooding displaced over 30,000 people and damaged 204,000 homes.",
+    "emoji": "\ud83c\udf00",
+    "source_file": "hurricane-harvey_00000001_post_disaster.png",
+    "annotated_image": "hurricane-harvey_annotated.png",
+    "image_size": "1024x1024",
+    "disaster_key": "hurricane-harvey",
+    "detected_image": "hurricane-harvey_detected.png",
+    "detections": 42,
+    "class_breakdown": {
+      "major-damage": 39,
+      "no-damage": 3
+    }
+  },
+  {
+    "name": "Hurricane Matthew",
+    "date": "October 4, 2016",
+    "location": "Les Cayes / J\u00e9r\u00e9mie, Haiti",
+    "lat": 18.1942,
+    "lng": -73.7508,
+    "country": "Haiti",
+    "disaster_type": "Hurricane (Category 4)",
+    "description": "Hurricane Matthew struck Haiti as a Category 4 hurricane, the strongest to hit the country since 1964. It killed over 500 people and left 1.4 million in need of humanitarian assistance.",
+    "emoji": "\ud83c\udf00",
+    "source_file": "hurricane-matthew_00000044_post_disaster.png",
+    "annotated_image": "hurricane-matthew_annotated.png",
+    "image_size": "1024x1024",
+    "disaster_key": "hurricane-matthew",
+    "detected_image": "hurricane-matthew_detected.png",
+    "detections": 17,
+    "class_breakdown": {
+      "no-damage": 16,
+      "minor-damage": 1
+    }
+  },
+  {
+    "name": "Hurricane Michael",
+    "date": "October 10, 2018",
+    "location": "Mexico Beach / Panama City, Florida, USA",
+    "lat": 30.1588,
+    "lng": -85.6602,
+    "country": "United States",
+    "disaster_type": "Hurricane (Category 5)",
+    "description": "Hurricane Michael made landfall near Mexico Beach, FL as a Category 5 hurricane \u2014 the strongest ever to hit the Florida panhandle. Storm surge of 9\u201314 feet obliterated entire blocks.",
+    "emoji": "\ud83c\udf00",
+    "source_file": "hurricane-michael_00000000_post_disaster.png",
+    "annotated_image": "hurricane-michael_annotated.png",
+    "image_size": "1024x1024",
+    "disaster_key": "hurricane-michael",
+    "detected_image": "hurricane-michael_detected.png",
+    "detections": 34,
+    "class_breakdown": {
+      "no-damage": 14,
+      "minor-damage": 20
+    }
+  },
+  {
+    "name": "Puebla Earthquake",
+    "date": "September 19, 2017",
+    "location": "Mexico City / Puebla, Mexico",
+    "lat": 19.4326,
+    "lng": -99.1332,
+    "country": "Mexico",
+    "disaster_type": "Earthquake (7.1 Mw)",
+    "description": "A magnitude 7.1 earthquake struck central Mexico, collapsing buildings across Mexico City and Puebla. Over 370 people were killed. It occurred on the 32nd anniversary of the 1985 quake.",
+    "emoji": "\ud83c\udfda\ufe0f",
+    "source_file": "mexico-earthquake_00000001_post_disaster.png",
+    "annotated_image": "mexico-earthquake_annotated.png",
+    "image_size": "1024x1024",
+    "disaster_key": "mexico-earthquake",
+    "detected_image": "mexico-earthquake_detected.png",
+    "detections": 59,
+    "class_breakdown": {
+      "no-damage": 59
+    }
+  },
+  {
+    "name": "Missouri River Flooding",
+    "date": "March 2019",
+    "location": "Nebraska / Iowa / Missouri, USA",
+    "lat": 41.2565,
+    "lng": -95.9345,
+    "country": "United States",
+    "disaster_type": "River Flooding",
+    "description": "A 'bomb cyclone' triggered catastrophic flooding along the Missouri and Platte Rivers, breaching levees and inundating farmland. Over $3 billion in damage across 14 million acres.",
+    "emoji": "\ud83c\udf0a",
+    "source_file": "midwest-flooding_00000005_post_disaster.png",
+    "annotated_image": "midwest-flooding_annotated.png",
+    "image_size": "1024x1024",
+    "disaster_key": "midwest-flooding",
+    "detections": 0,
+    "class_breakdown": {}
+  },
+  {
+    "name": "Sulawesi Earthquake & Tsunami",
+    "date": "September 28, 2018",
+    "location": "Palu, Central Sulawesi, Indonesia",
+    "lat": -0.8917,
+    "lng": 119.8707,
+    "country": "Indonesia",
+    "disaster_type": "Earthquake (7.5 Mw) + Tsunami",
+    "description": "A 7.5-magnitude earthquake generated a devastating tsunami up to 11 meters high that struck the coastal city of Palu. Soil liquefaction swallowed entire neighborhoods. Over 4,340 killed.",
+    "emoji": "\ud83c\udf0a",
+    "source_file": "palu-tsunami_00000000_post_disaster.png",
+    "annotated_image": "palu-tsunami_annotated.png",
+    "image_size": "1024x1024",
+    "disaster_key": "palu-tsunami",
+    "detected_image": "palu-tsunami_detected.png",
+    "detections": 40,
+    "class_breakdown": {
+      "no-damage": 40
+    }
+  },
+  {
+    "name": "Tubbs Fire",
+    "date": "October 8, 2017",
+    "location": "Santa Rosa / Napa Valley, California, USA",
+    "lat": 38.4404,
+    "lng": -122.7141,
+    "country": "United States",
+    "disaster_type": "Wildfire",
+    "description": "The Tubbs Fire burned through Santa Rosa's Coffey Park and Fountaingrove neighborhoods, destroying 5,636 structures. It was the most destructive wildfire in California history at the time.",
+    "emoji": "\ud83d\udd25",
+    "source_file": "santa-rosa-wildfire_00000007_post_disaster.png",
+    "annotated_image": "santa-rosa-wildfire_annotated.png",
+    "image_size": "1024x1024",
+    "disaster_key": "santa-rosa-wildfire",
+    "detected_image": "santa-rosa-wildfire_detected.png",
+    "detections": 110,
+    "class_breakdown": {
+      "no-damage": 44,
+      "destroyed": 66
+    }
+  },
+  {
+    "name": "Thomas Fire / Woolsey Fire",
+    "date": "December 2017 \u2013 November 2018",
+    "location": "Ventura / Malibu, California, USA",
+    "lat": 34.2746,
+    "lng": -119.229,
+    "country": "United States",
+    "disaster_type": "Wildfire",
+    "description": "The Thomas Fire burned 281,893 acres in Ventura and Santa Barbara counties, making it one of the largest wildfires in California history. The later Woolsey Fire devastated Malibu communities.",
+    "emoji": "\ud83d\udd25",
+    "source_file": "socal-fire_00000003_post_disaster.png",
+    "annotated_image": "socal-fire_annotated.png",
+    "image_size": "1024x1024",
+    "disaster_key": "socal-fire",
+    "detected_image": "socal-fire_detected.png",
+    "detections": 17,
+    "class_breakdown": {
+      "no-damage": 17
+    }
+  }
+]

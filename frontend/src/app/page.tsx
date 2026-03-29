@@ -114,7 +114,7 @@ export default function DashboardPage() {
         </p>
 
         <div className="animate-fade-up" style={{ animationDelay: "0.2s", animationFillMode: "both", maxWidth: 500, margin: "0 auto 16px" }}>
-          <label style={{ display: "block", textAlign: "left", fontSize: 13, fontWeight: 700, color: "var(--text-faint)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>
+          <label style={{ display: "block", textAlign: "left", fontSize: 14, fontWeight: 700, color: "#fff", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>
             Mission Location
           </label>
           <form
@@ -191,31 +191,7 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <div
-        className="animate-fade-up"
-        style={{
-          animationDelay: "0.4s",
-          animationFillMode: "both",
-          maxWidth: 960,
-          margin: "0 auto 48px",
-          display: "flex",
-          justifyContent: "space-around",
-          gap: 24,
-        }}
-      >
-        {[
-          { value: "Works Offline",   label: "Syncs when connected" },
-          { value: "Hazard-Aware",    label: "Avoids danger zones" },
-          { value: "Mission History", label: "Secure local log" },
-        ].map(({ value, label }) => (
-          <div key={label} className="capability-card">
-            <p style={{ fontFamily: "var(--font-sans)", fontSize: 16, fontWeight: 700, color: "#A1A1AA", letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: 6 }}>
-              {value}
-            </p>
-            <p style={{ fontSize: 14, color: "#71717A" }}>{label}</p>
-          </div>
-        ))}
-      </div>
+
 
     </div>
   );

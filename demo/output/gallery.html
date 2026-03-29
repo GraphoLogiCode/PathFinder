@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PathFinder — Satellite Image Collection</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e17;
+    --bg2: #0f1525;
+    --card-bg: #111827;
+    --card-border: #1e293b;
+    --card-border-active: #06d6a0;
+    --accent: #06d6a0;
+    --accent2: #118ab2;
+    --accent-glow: rgba(6, 214, 160, 0.15);
+    --text: #e2e8f0;
+    --text-muted: #94a3b8;
+    --danger: #ef4444;
+    --warning: #f59e0b;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  .header {
+    text-align: center;
+    padding: 3rem 1rem 2rem;
+    background: linear-gradient(135deg, #0a0e17 0%, #1a1a2e 50%, #16213e 100%);
+    border-bottom: 1px solid var(--card-border);
+  }
+  .header h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0.5rem;
+  }
+  .header p {
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  /* ── Stats Bar ── */
+  .stats-bar {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    padding: 1.5rem;
+    background: rgba(17, 24, 39, 0.8);
+    border-bottom: 1px solid var(--card-border);
+    flex-wrap: wrap;
+  }
+  .stat { text-align: center; }
+  .stat-value { font-size: 1.8rem; font-weight: 700; color: var(--accent); }
+  .stat-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; }
+
+  /* ── Search Section ── */
+  .search-section {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--card-border);
+    padding: 1.5rem 2rem;
+  }
+  .search-container {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .search-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .search-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+  .search-input-group {
+    flex: 1;
+    min-width: 200px;
+    position: relative;
+  }
+  .search-input-group label {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-bottom: 0.3rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .search-input-group input {
+    width: 100%;
+    padding: 0.7rem 1rem;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .search-input-group input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+  .search-input-group input::placeholder {
+    color: #475569;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.85rem;
+  }
+  .search-btn {
+    padding: 0.7rem 1.5rem;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border: none;
+    border-radius: 10px;
+    color: #0a0e17;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.2s;
+    align-self: flex-end;
+    white-space: nowrap;
+  }
+  .search-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 20px var(--accent-glow);
+  }
+  .search-btn:active { transform: translateY(0); }
+
+  .search-btn.reset-btn {
+    background: transparent;
+    border: 1px solid var(--card-border);
+    color: var(--text-muted);
+  }
+  .search-btn.reset-btn:hover {
+    border-color: var(--text-muted);
+    color: var(--text);
+    box-shadow: none;
+  }
+
+  .search-help {
+    margin-top: 0.75rem;
+    font-size: 0.78rem;
+    color: #475569;
+    line-height: 1.6;
+  }
+  .search-help code {
+    background: rgba(6, 214, 160, 0.08);
+    color: var(--accent);
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+  }
+
+  /* ── Results banner ── */
+  .results-banner {
+    display: none;
+    max-width: 1400px;
+    margin: 1rem auto 0;
+    padding: 0.75rem 2rem;
+    background: linear-gradient(90deg, rgba(6,214,160,0.08), transparent);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .results-banner.visible { display: flex; }
+  .results-banner strong { color: var(--accent); }
+
+  /* ── Grid ── */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
+    gap: 1.5rem;
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  /* ── Card ── */
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    overflow: hidden;
+    transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease, opacity 0.3s ease;
+    position: relative;
+  }
+  .card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px rgba(6, 214, 160, 0.1);
+  }
+  .card.closest {
+    border-color: var(--accent);
+    box-shadow: 0 0 30px var(--accent-glow);
+  }
+  .card.hidden { display: none; }
+
+  .card img {
+    width: 100%;
+    height: 300px;
+    object-fit: cover;
+    display: block;
+  }
+  .card-body { padding: 1.25rem; }
+  .card-title {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .badge-hurricane  { background: rgba(96, 165, 250, 0.2); color: #60a5fa; }
+  .badge-earthquake { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
+  .badge-wildfire   { background: rgba(239, 68, 68, 0.2);  color: #ef4444; }
+  .badge-volcano    { background: rgba(249, 115, 22, 0.2); color: #f97316; }
+  .badge-flood      { background: rgba(56, 189, 248, 0.2); color: #38bdf8; }
+  .badge-tsunami    { background: rgba(139, 92, 246, 0.2); color: #8b5cf6; }
+
+  .badge-distance {
+    background: rgba(6, 214, 160, 0.15);
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    display: none;
+  }
+  .badge-distance.visible { display: inline-block; }
+
+  .badge-closest {
+    background: var(--accent);
+    color: #0a0e17;
+    font-weight: 700;
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 0 0 var(--accent-glow); }
+    50% { box-shadow: 0 0 12px 4px var(--accent-glow); }
+  }
+
+  .card-location {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin: 0.25rem 0 0.5rem;
+  }
+  .card-desc {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin-bottom: 1rem;
+  }
+  .card-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    border-top: 1px solid var(--card-border);
+    padding-top: 0.75rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .card-meta span {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .gps {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--accent);
+    background: rgba(6, 214, 160, 0.1);
+    padding: 0.15rem 0.5rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .gps:hover {
+    background: rgba(6, 214, 160, 0.25);
+  }
+
+  .footer {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    border-top: 1px solid var(--card-border);
+  }
+
+  /* ── No results ── */
+  .no-results {
+    display: none;
+    text-align: center;
+    padding: 4rem 2rem;
+    color: var(--text-muted);
+    grid-column: 1 / -1;
+  }
+  .no-results.visible { display: block; }
+  .no-results .icon { font-size: 3rem; margin-bottom: 1rem; }
+  .no-results h3 { font-size: 1.3rem; color: var(--text); margin-bottom: 0.5rem; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🛰️ PathFinder Satellite Collection</h1>
+  <p>Real-world satellite imagery from 10 major disaster events, geo-located and cataloged for AI-driven damage assessment.</p>
+</div>
+
+<div class="stats-bar">
+  <div class="stat"><div class="stat-value">10</div><div class="stat-label">Disaster Events</div></div>
+  <div class="stat"><div class="stat-value">5</div><div class="stat-label">Countries</div></div>
+  <div class="stat"><div class="stat-value">678</div><div class="stat-label">Satellite Images</div></div>
+  <div class="stat"><div class="stat-value">5</div><div class="stat-label">Disaster Types</div></div>
+</div>
+
+<div class="search-section">
+  <div class="search-container">
+    <div class="search-title">🔍 Search by GPS Coordinates or Location</div>
+    <div class="search-row">
+      <div class="search-input-group" style="flex: 2;">
+        <label for="search-input">GPS Coordinates or Location Name</label>
+        <input type="text" id="search-input" placeholder="e.g.  30.15, -85.66   or   Houston   or   wildfire" autocomplete="off">
+      </div>
+      <div class="search-input-group" style="flex: 0.8; min-width: 120px;">
+        <label for="search-radius">Max Radius (km)</label>
+        <input type="number" id="search-radius" placeholder="∞" min="0" step="100" value="">
+      </div>
+      <button class="search-btn" onclick="doSearch()" id="search-btn">🛰️ Search</button>
+      <button class="search-btn reset-btn" onclick="resetSearch()" id="reset-btn">✕ Reset</button>
+    </div>
+    <div class="search-help">
+      <strong>GPS search:</strong> <code>30.15, -85.66</code> or <code>14.47 -90.88</code> &nbsp;·&nbsp;
+      <strong>Text search:</strong> <code>Houston</code> <code>wildfire</code> <code>Haiti</code> <code>tsunami</code> &nbsp;·&nbsp;
+      <strong>Tip:</strong> Click any GPS badge on a card to search from that location
+    </div>
+  </div>
+</div>
+
+<div class="results-banner" id="results-banner"></div>
+
+<div class="grid" id="card-grid">
+  <div class="no-results" id="no-results">
+    <div class="icon">🛰️</div>
+    <h3>No disasters found in this area</h3>
+    <p>Try a wider search radius or different coordinates.</p>
+  </div>
+</div>
+
+<div class="footer">
+  PathFinder — AI-Powered Disaster Response Platform &nbsp;|&nbsp; Satellite data from xBD (xView2) Dataset
+</div>
+
+<script>
+// ─── Disaster Data ────────────────────────────────────────────────
+const DISASTERS = [
+  {
+    "name": "Volc\u00e1n de Fuego Eruption",
+    "emoji": "\ud83c\udf0b",
+    "location": "San Miguel Los Lotes, Guatemala",
+    "date": "June 3, 2018",
+    "lat": 14.4734,
+    "lng": -90.881,
+    "country": "Guatemala",
+    "disaster_type": "Volcanic Eruption",
+    "description": "The Volc\u00e1n de Fuego erupted violently, sending pyroclastic flows through the village of San Miguel Los Lotes.  The eruption killed over 190 people and destroyed entire communities.",
+    "source_file": "guatemala-volcano_00000000_post_disaster.png",
+    "annotated_image": "guatemala-volcano_annotated.png",
+    "disaster_key": "guatemala-volcano",
+    "detections": 6,
+    "class_breakdown": {
+      "no-damage": 6
+    }
+  },
+  {
+    "name": "Hurricane Florence",
+    "emoji": "\ud83c\udf00",
+    "location": "Leland / Wilmington, North Carolina, USA",
+    "date": "September 14, 2018",
+    "lat": 34.2257,
+    "lng": -78.0447,
+    "country": "United States",
+    "disaster_type": "Hurricane (Category 1)",
+    "description": "Hurricane Florence made landfall near Wrightsville Beach, NC as a Category 1 hurricane.  Catastrophic freshwater flooding caused over $24 billion in damage across the Carolinas.",
+    "source_file": "hurricane-florence_00000048_post_disaster.png",
+    "annotated_image": "hurricane-florence_annotated.png",
+    "disaster_key": "hurricane-florence",
+    "detections": 20,
+    "class_breakdown": {
+      "no-damage": 4,
+      "major-damage": 16
+    }
+  },
+  {
+    "name": "Hurricane Harvey",
+    "emoji": "\ud83c\udf00",
+    "location": "Houston / Port Aransas, Texas, USA",
+    "date": "August 25, 2017",
+    "lat": 29.7604,
+    "lng": -95.3698,
+    "country": "United States",
+    "disaster_type": "Hurricane (Category 4)",
+    "description": "Hurricane Harvey dumped over 60 inches of rain on Houston over four days \u2014 the wettest tropical cyclone on record in the US. Flooding displaced over 30,000 people and damaged 204,000 homes.",
+    "source_file": "hurricane-harvey_00000001_post_disaster.png",
+    "annotated_image": "hurricane-harvey_annotated.png",
+    "disaster_key": "hurricane-harvey",
+    "detections": 42,
+    "class_breakdown": {
+      "major-damage": 39,
+      "no-damage": 3
+    }
+  },
+  {
+    "name": "Hurricane Matthew",
+    "emoji": "\ud83c\udf00",
+    "location": "Les Cayes / J\u00e9r\u00e9mie, Haiti",
+    "date": "October 4, 2016",
+    "lat": 18.1942,
+    "lng": -73.7508,
+    "country": "Haiti",
+    "disaster_type": "Hurricane (Category 4)",
+    "description": "Hurricane Matthew struck Haiti as a Category 4 hurricane, the strongest to hit the country since 1964. It killed over 500 people and left 1.4 million in need of humanitarian assistance.",
+    "source_file": "hurricane-matthew_00000044_post_disaster.png",
+    "annotated_image": "hurricane-matthew_annotated.png",
+    "disaster_key": "hurricane-matthew",
+    "detections": 17,
+    "class_breakdown": {
+      "no-damage": 16,
+      "minor-damage": 1
+    }
+  },
+  {
+    "name": "Hurricane Michael",
+    "emoji": "\ud83c\udf00",
+    "location": "Mexico Beach / Panama City, Florida, USA",
+    "date": "October 10, 2018",
+    "lat": 30.1588,
+    "lng": -85.6602,
+    "country": "United States",
+    "disaster_type": "Hurricane (Category 5)",
+    "description": "Hurricane Michael made landfall near Mexico Beach, FL as a Category 5 hurricane \u2014 the strongest ever to hit the Florida panhandle. Storm surge of 9\u201314 feet obliterated entire blocks.",
+    "source_file": "hurricane-michael_00000000_post_disaster.png",
+    "annotated_image": "hurricane-michael_annotated.png",
+    "disaster_key": "hurricane-michael",
+    "detections": 34,
+    "class_breakdown": {
+      "no-damage": 14,
+      "minor-damage": 20
+    }
+  },
+  {
+    "name": "Puebla Earthquake",
+    "emoji": "\ud83c\udfda\ufe0f",
+    "location": "Mexico City / Puebla, Mexico",
+    "date": "September 19, 2017",
+    "lat": 19.4326,
+    "lng": -99.1332,
+    "country": "Mexico",
+    "disaster_type": "Earthquake (7.1 Mw)",
+    "description": "A magnitude 7.1 earthquake struck central Mexico, collapsing buildings across Mexico City and Puebla. Over 370 people were killed. It occurred on the 32nd anniversary of the 1985 quake.",
+    "source_file": "mexico-earthquake_00000001_post_disaster.png",
+    "annotated_image": "mexico-earthquake_annotated.png",
+    "disaster_key": "mexico-earthquake",
+    "detections": 59,
+    "class_breakdown": {
+      "no-damage": 59
+    }
+  },
+  {
+    "name": "Missouri River Flooding",
+    "emoji": "\ud83c\udf0a",
+    "location": "Nebraska / Iowa / Missouri, USA",
+    "date": "March 2019",
+    "lat": 41.2565,
+    "lng": -95.9345,
+    "country": "United States",
+    "disaster_type": "River Flooding",
+    "description": "A 'bomb cyclone' triggered catastrophic flooding along the Missouri and Platte Rivers, breaching levees and inundating farmland. Over $3 billion in damage across 14 million acres.",
+    "source_file": "midwest-flooding_00000005_post_disaster.png",
+    "annotated_image": "midwest-flooding_annotated.png",
+    "disaster_key": "midwest-flooding",
+    "detections": 0,
+    "class_breakdown": {}
+  },
+  {
+    "name": "Sulawesi Earthquake & Tsunami",
+    "emoji": "\ud83c\udf0a",
+    "location": "Palu, Central Sulawesi, Indonesia",
+    "date": "September 28, 2018",
+    "lat": -0.8917,
+    "lng": 119.8707,
+    "country": "Indonesia",
+    "disaster_type": "Earthquake (7.5 Mw) + Tsunami",
+    "description": "A 7.5-magnitude earthquake generated a devastating tsunami up to 11 meters high that struck the coastal city of Palu. Soil liquefaction swallowed entire neighborhoods. Over 4,340 killed.",
+    "source_file": "palu-tsunami_00000000_post_disaster.png",
+    "annotated_image": "palu-tsunami_annotated.png",
+    "disaster_key": "palu-tsunami",
+    "detections": 40,
+    "class_breakdown": {
+      "no-damage": 40
+    }
+  },
+  {
+    "name": "Tubbs Fire",
+    "emoji": "\ud83d\udd25",
+    "location": "Santa Rosa / Napa Valley, California, USA",
+    "date": "October 8, 2017",
+    "lat": 38.4404,
+    "lng": -122.7141,
+    "country": "United States",
+    "disaster_type": "Wildfire",
+    "description": "The Tubbs Fire burned through Santa Rosa's Coffey Park and Fountaingrove neighborhoods, destroying 5,636 structures. It was the most destructive wildfire in California history at the time.",
+    "source_file": "santa-rosa-wildfire_00000007_post_disaster.png",
+    "annotated_image": "santa-rosa-wildfire_annotated.png",
+    "disaster_key": "santa-rosa-wildfire",
+    "detections": 110,
+    "class_breakdown": {
+      "no-damage": 44,
+      "destroyed": 66
+    }
+  },
+  {
+    "name": "Thomas Fire / Woolsey Fire",
+    "emoji": "\ud83d\udd25",
+    "location": "Ventura / Malibu, California, USA",
+    "date": "December 2017 \u2013 November 2018",
+    "lat": 34.2746,
+    "lng": -119.229,
+    "country": "United States",
+    "disaster_type": "Wildfire",
+    "description": "The Thomas Fire burned 281,893 acres in Ventura and Santa Barbara counties, making it one of the largest wildfires in California history. The later Woolsey Fire devastated Malibu communities.",
+    "source_file": "socal-fire_00000003_post_disaster.png",
+    "annotated_image": "socal-fire_annotated.png",
+    "disaster_key": "socal-fire",
+    "detections": 17,
+    "class_breakdown": {
+      "no-damage": 17
+    }
+  }
+];
+
+// ─── Badge class mapping ──────────────────────────────────────────
+function getBadgeClass(dtype) {
+  const d = dtype.toLowerCase();
+  if (d.includes('hurricane')) return 'badge-hurricane';
+  if (d.includes('earthquake')) return 'badge-earthquake';
+  if (d.includes('wildfire') || d.includes('fire')) return 'badge-wildfire';
+  if (d.includes('volcano')) return 'badge-volcano';
+  if (d.includes('tsunami')) return 'badge-tsunami';
+  return 'badge-flood';
+}
+
+// ─── Haversine distance (km) ──────────────────────────────────────
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon/2) * Math.sin(dLon/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ─── Format distance ─────────────────────────────────────────────
+function formatDist(km) {
+  if (km < 1) return Math.round(km * 1000) + ' m';
+  if (km < 100) return km.toFixed(1) + ' km';
+  return Math.round(km).toLocaleString() + ' km';
+}
+
+// ─── Parse GPS from text ─────────────────────────────────────────
+function parseGPS(text) {
+  // Matches: "30.15, -85.66" or "30.15 -85.66" or "(30.15, -85.66)"
+  const cleaned = text.replace(/[()]/g, '').trim();
+  const patterns = [
+    /^\s*(-?\d+\.?\d*)\s*[,\s]\s*(-?\d+\.?\d*)\s*$/,
+  ];
+  for (const re of patterns) {
+    const m = cleaned.match(re);
+    if (m) {
+      const lat = parseFloat(m[1]);
+      const lng = parseFloat(m[2]);
+      if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+        return { lat, lng };
+      }
+    }
+  }
+  return null;
+}
+
+// ─── Build a card HTML ───────────────────────────────────────────
+function buildCard(item, distance, isClosest) {
+  const badgeCls = getBadgeClass(item.disaster_type);
+  const distBadge = distance !== null
+    ? `<span class="badge badge-distance visible ${isClosest ? 'badge-closest' : ''}">${isClosest ? '📍 CLOSEST · ' : ''}${formatDist(distance)}</span>`
+    : `<span class="badge badge-distance"></span>`;
+
+  return `
+  <div class="card ${isClosest ? 'closest' : ''}" data-key="${item.disaster_key}" data-lat="${item.lat}" data-lng="${item.lng}">
+    <img src="${item.annotated_image}" alt="${item.name}" loading="lazy">
+    <div class="card-body">
+      <div class="card-title">
+        <span>${item.emoji}</span>
+        <span>${item.name}</span>
+        <span class="badge ${badgeCls}">${item.disaster_type}</span>
+        ${distBadge}
+      </div>
+      <div class="card-location">📍 ${item.location} &nbsp;|&nbsp; 📅 ${item.date}</div>
+      <div class="card-desc">${item.description}</div>
+      <div class="card-meta">
+        <span class="gps" onclick="searchFromGPS(${item.lat}, ${item.lng})" title="Click to search from this location">(${item.lat.toFixed(4)}, ${item.lng.toFixed(4)})</span>
+        <span>🌍 ${item.country}</span>
+        <span>📸 ${item.source_file}</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ─── Render all cards ────────────────────────────────────────────
+function renderCards(items, distances, closestIdx) {
+  const grid = document.getElementById('card-grid');
+  const noResults = document.getElementById('no-results');
+
+  // Keep the no-results element reference
+  let html = '';
+  items.forEach((item, i) => {
+    const dist = distances ? distances[i] : null;
+    const isClosest = (closestIdx !== null && i === 0);
+    html += buildCard(item, dist, isClosest);
+  });
+
+  if (items.length === 0) {
+    grid.innerHTML = '';
+    grid.appendChild(createNoResults());
+  } else {
+    grid.innerHTML = html;
+  }
+}
+
+function createNoResults() {
+  const div = document.createElement('div');
+  div.className = 'no-results visible';
+  div.innerHTML = '<div class="icon">🛰️</div><h3>No disasters found in this area</h3><p>Try a wider search radius or different coordinates.</p>';
+  return div;
+}
+
+// ─── Search logic ────────────────────────────────────────────────
+function doSearch() {
+  const query = document.getElementById('search-input').value.trim();
+  const radiusInput = document.getElementById('search-radius').value;
+  const maxRadius = radiusInput ? parseFloat(radiusInput) : Infinity;
+  const banner = document.getElementById('results-banner');
+
+  if (!query) {
+    resetSearch();
+    return;
+  }
+
+  // Try GPS parse
+  const gps = parseGPS(query);
+
+  if (gps) {
+    // GPS-based search: sort by distance
+    const withDist = DISASTERS.map(item => ({
+      item,
+      dist: haversine(gps.lat, gps.lng, item.lat, item.lng)
+    }));
+
+    withDist.sort((a, b) => a.dist - b.dist);
+
+    const filtered = maxRadius < Infinity
+      ? withDist.filter(d => d.dist <= maxRadius)
+      : withDist;
+
+    const items = filtered.map(d => d.item);
+    const distances = filtered.map(d => d.dist);
+
+    renderCards(items, distances, items.length > 0 ? 0 : null);
+
+    // Update banner
+    const closestName = items.length > 0 ? items[0].name : 'None';
+    banner.innerHTML = `🛰️ Searching from <strong>(${gps.lat.toFixed(4)}, ${gps.lng.toFixed(4)})</strong> · Found <strong>${items.length}</strong> disaster(s)${maxRadius < Infinity ? ` within ${maxRadius} km` : ''} · Closest: <strong>${closestName}</strong>`;
+    banner.classList.add('visible');
+
+  } else {
+    // Text-based search
+    const q = query.toLowerCase();
+    const matches = DISASTERS.filter(item =>
+      item.name.toLowerCase().includes(q) ||
+      item.location.toLowerCase().includes(q) ||
+      item.country.toLowerCase().includes(q) ||
+      item.disaster_type.toLowerCase().includes(q) ||
+      item.description.toLowerCase().includes(q) ||
+      item.disaster_key.toLowerCase().includes(q)
+    );
+
+    renderCards(matches, null, null);
+
+    banner.innerHTML = `🔍 Text search: "<strong>${query}</strong>" · Found <strong>${matches.length}</strong> disaster(s)`;
+    banner.classList.add('visible');
+  }
+}
+
+function resetSearch() {
+  document.getElementById('search-input').value = '';
+  document.getElementById('search-radius').value = '';
+  document.getElementById('results-banner').classList.remove('visible');
+  renderCards(DISASTERS, null, null);
+}
+
+function searchFromGPS(lat, lng) {
+  document.getElementById('search-input').value = `${lat}, ${lng}`;
+  doSearch();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ─── Keyboard shortcut ──────────────────────────────────────────
+document.getElementById('search-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') doSearch();
+  if (e.key === 'Escape') resetSearch();
+});
+
+// ─── Initial render ─────────────────────────────────────────────
+renderCards(DISASTERS, null, null);
+</script>
+
+</body>
+</html>

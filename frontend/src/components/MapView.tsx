@@ -106,6 +106,8 @@ export default function MapView({ onMapClick, onMoveEnd, initialCenter, initialZ
             (window as any).__pathfinderMap = mapRef.current.getMap();
           }
         }}
+        // @ts-ignore — preserveDrawingBuffer is needed for canvas.toBlob() region capture
+        preserveDrawingBuffer={true}
         style={{ width: "100%", height: "100%" }}
       >
         {children}

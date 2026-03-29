@@ -21,7 +21,7 @@ from app.routes.georef import run_georef  # reuse georef pipeline
 
 router = APIRouter()
 
-MAPTILER_KEY = "NkMHZA0YT80pkS5j2Vys"
+MAPTILER_KEY = "TQH7vqclXjIJIT15XHV1"
 
 
 class RegionRequest(BaseModel):

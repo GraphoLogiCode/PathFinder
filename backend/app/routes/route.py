@@ -49,11 +49,27 @@ async def route(req: RouteRequest):
     Uses Valhalla routing engine (public demo or local instance).
     """
     # Extract polygon coords from GeoJSON danger_zones
+    # Valhalla expects exclude_polygons as [[{lat, lon}, ...], ...]
     exclude_polygons = []
     if req.danger_zones and req.danger_zones.get("features"):
         for feature in req.danger_zones["features"]:
-            coords = feature["geometry"]["coordinates"]
-            exclude_polygons.append(coords)
+            geom = feature.get("geometry", {})
+            geom_type = geom.get("type", "")
+            coords = geom.get("coordinates", [])
+
+            rings = []
+            if geom_type == "Polygon" and coords:
+                # GeoJSON Polygon: [[[lng, lat], ...]]  → take outer ring
+                rings = [coords[0]]
+            elif geom_type == "MultiPolygon" and coords:
+                # GeoJSON MultiPolygon: [[[[lng, lat], ...]], ...]
+                rings = [poly[0] for poly in coords if poly]
+
+            for ring in rings:
+                # Convert [lng, lat] → {"lat": lat, "lon": lng} for Valhalla
+                valhalla_ring = [{"lat": pt[1], "lon": pt[0]} for pt in ring]
+                if len(valhalla_ring) >= 3:
+                    exclude_polygons.append(valhalla_ring)
 
     valhalla_body = {
         "locations": [
@@ -87,6 +103,22 @@ async def route(req: RouteRequest):
         except Exception as e:
             last_error = e
             continue
+
+    # If routing with exclude_polygons failed, retry without them
+    if data is None and exclude_polygons:
+        valhalla_body.pop("exclude_polygons", None)
+        for base_url in urls_to_try:
+            if not base_url:
+                continue
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    resp = await client.post(f"{base_url}/route", json=valhalla_body)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    break
+            except Exception as e:
+                last_error = e
+                continue
 
     if data is None:
         raise HTTPException(502, f"Valhalla routing failed: {last_error}")

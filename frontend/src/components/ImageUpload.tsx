@@ -104,29 +104,29 @@ export default function ImageUpload({ onDetections, onDangerZones, onUploadState
               animation: "spin 0.8s linear infinite",
             }}
           />
-          <p style={{ fontSize: 12, color: "var(--accent)", fontFamily: "var(--font-sans)", letterSpacing: "0.02em" }}>
+          <p style={{ fontSize: 15, color: "var(--accent)", fontFamily: "var(--font-sans)", letterSpacing: "0.02em", fontWeight: 600 }}>
             Analyzing damage…
           </p>
           {fileName && (
-            <p style={{ fontSize: 10, color: "var(--text-faint)", marginTop: 4, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200, whiteSpace: "nowrap" }}>
+            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", marginTop: 4, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200, whiteSpace: "nowrap" }}>
               {fileName}
             </p>
           )}
         </>
       ) : error ? (
         <>
-          <p style={{ fontSize: 12, color: "#ef4444", textAlign: "center", fontFamily: "var(--font-sans)" }}>{error}</p>
-          <p style={{ fontSize: 10, color: "var(--text-faint)", marginTop: 4 }}>Click to retry</p>
+          <p style={{ fontSize: 14, color: "#ef4444", textAlign: "center", fontFamily: "var(--font-sans)", fontWeight: 600 }}>{error}</p>
+          <p style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginTop: 4 }}>Click to retry</p>
         </>
       ) : (
         <>
           <div className="animate-icon-float">
             <UploadIcon />
           </div>
-          <p style={{ fontSize: 12, fontWeight: 500, color: "var(--text-primary)", fontFamily: "var(--font-sans)" }}>
+          <p style={{ fontSize: 15, fontWeight: 600, color: "#fff", fontFamily: "var(--font-sans)" }}>
             {dragActive ? "Release to analyze" : "Upload satellite image"}
           </p>
-          <p style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 3, fontFamily: "var(--font-sans)" }}>
+          <p style={{ fontSize: 13, color: "rgba(255,255,255,0.55)", marginTop: 4, fontFamily: "var(--font-sans)" }}>
             or click to browse
           </p>
         </>
@@ -144,7 +144,7 @@ export default function ImageUpload({ onDetections, onDangerZones, onUploadState
         gap: 8,
       }}>
         <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e", animation: "pulse-ring 2s infinite" }} />
-        <span style={{ fontSize: 9, color: "var(--text-muted)", letterSpacing: "0.04em", textTransform: "uppercase" }}>Coverage: ~24 km² • 12 hrs ago</span>
+        <span style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", letterSpacing: "0.04em", textTransform: "uppercase", fontWeight: 500 }}>Coverage: ~24 km² • 12 hrs ago</span>
       </div>
 
       <style>{`

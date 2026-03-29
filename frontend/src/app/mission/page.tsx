@@ -9,7 +9,7 @@ import RouteLayer from "@/components/RouteLayer";
 import AnalysisPanel from "@/components/AnalysisPanel";
 import RegionSelect from "@/components/RegionSelect";
 import { Marker } from "react-map-gl/maplibre";
-import { detectRegion } from "@/lib/api";
+import { detectDamage, geoReference } from "@/lib/api";
 
 export default function MissionPage() {
   return (
@@ -66,16 +66,60 @@ function MissionContent() {
     setDetections([]);
   };
 
+  // Region detection feedback message
+  const [regionMessage, setRegionMessage] = useState<string | null>(null);
+
   const handleRegionSelected = useCallback(
-    async (bounds: { north: number; south: number; east: number; west: number }) => {
+    async (bounds: {
+      north: number; south: number; east: number; west: number;
+      imageBlob: Blob; imageWidth: number; imageHeight: number;
+    }) => {
       setIsSelectingRegion(false);
       setIsAnalyzingRegion(true);
+      setRegionMessage(null);
       try {
-        const result = await detectRegion(bounds);
+        // Convert blob to File for the existing /detect endpoint
+        const file = new File([bounds.imageBlob], "region.png", { type: "image/png" });
+        console.log("[Mission] Sending region for detection:", {
+          blobSize: bounds.imageBlob.size,
+          imageSize: `${bounds.imageWidth}x${bounds.imageHeight}`,
+          bounds: { N: bounds.north.toFixed(5), S: bounds.south.toFixed(5), E: bounds.east.toFixed(5), W: bounds.west.toFixed(5) },
+        });
+
+        // Step 1: Run YOLO via /detect (uses best.pt) with source=region for pre-processing
+        const result = await detectDamage(file, "region");
+        console.log("[Mission] Detection result:", {
+          detections: result.detections?.length ?? 0,
+          image_size: result.image_size,
+        });
         setDetections(result.detections ?? []);
-        if (result.danger_zones) setDangerZones(result.danger_zones);
+
+        // Step 2: Geo-reference using the actual region bounds
+        if (result.detections?.length > 0) {
+          const anchorLat = (bounds.north + bounds.south) / 2;
+          const anchorLng = (bounds.east + bounds.west) / 2;
+
+          // Calculate GSD from bounds
+          const latSpanM = Math.abs(bounds.north - bounds.south) * 111320;
+          const lngSpanM = Math.abs(bounds.east - bounds.west) * 111320 * Math.cos(anchorLat * Math.PI / 180);
+          const gsd = Math.max(latSpanM / result.image_size.height, lngSpanM / result.image_size.width);
+
+          console.log("[Mission] Geo-referencing:", { anchorLat, anchorLng, gsd });
+
+          const geojson = await geoReference(
+            result.detections,
+            { lat: anchorLat, lng: anchorLng },
+            gsd,
+            [result.image_size.width / 2, result.image_size.height / 2],
+          );
+          setDangerZones(geojson);
+          setRegionMessage(`✅ Found ${result.detections.length} damage zone${result.detections.length > 1 ? "s" : ""}`);
+        } else {
+          setRegionMessage("ℹ️ No damage detected in selected region — try a different area or zoom level");
+        }
       } catch (err: any) {
         console.error("Region detection failed:", err);
+        setRegionMessage(`❌ Detection failed: ${err.message}`);
       } finally {
         setIsAnalyzingRegion(false);
       }
@@ -131,10 +175,11 @@ function MissionContent() {
           onClearMarkers={handleClear}
           onResetStart={() => { setStart(null); setRoute(null); }}
           onResetEnd={() => { setEnd(null); setRoute(null); }}
-          onAnalyzeRegion={() => setIsSelectingRegion(!isSelectingRegion)}
+          onAnalyzeRegion={() => { setIsSelectingRegion(!isSelectingRegion); setRegionMessage(null); }}
           isSelectingRegion={isSelectingRegion}
           isAnalyzingRegion={isAnalyzingRegion}
           onGenerateRescuePlan={handleGenerateRescuePlan}
+          regionMessage={regionMessage}
         />
       </aside>
 
@@ -188,26 +233,26 @@ function MissionContent() {
           />
 
           <div className="glass-panel animate-fade-up" style={{ padding: "16px 18px", borderRadius: 4 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 14 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: "#fff", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 16 }}>
               AI Analysis
             </h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Status</span>
-                <span style={{ fontSize: 11, color: isDetecting || isAnalyzingRegion ? "var(--accent-hi)" : detections.length > 0 ? "#22c55e" : "var(--text-faint)", fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 13, color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600 }}>Status</span>
+                <span style={{ fontSize: 13, color: isDetecting || isAnalyzingRegion ? "var(--accent-hi)" : detections.length > 0 ? "#22c55e" : "rgba(255,255,255,0.5)", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
                   {(isDetecting || isAnalyzingRegion) && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--accent-hi)", animation: "pulse-ring 2s infinite" }} />}
                   {isDetecting ? "Analyzing image..." : isAnalyzingRegion ? "Analyzing region..." : detections.length > 0 ? "Analysis complete" : "Waiting for input"}
                 </span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Detections</span>
-                <span style={{ fontSize: 11, color: "var(--text-primary)", fontFamily: "var(--font-mono, monospace)" }}>
+                <span style={{ fontSize: 13, color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600 }}>Detections</span>
+                <span style={{ fontSize: 13, color: "#fff", fontFamily: "var(--font-mono, monospace)", fontWeight: 500 }}>
                   {(isDetecting || isAnalyzingRegion) ? "--" : `${detections.length} zones`}
                 </span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Confidence</span>
-                <span style={{ fontSize: 11, color: "var(--text-primary)", fontFamily: "var(--font-mono, monospace)" }}>
+                <span style={{ fontSize: 13, color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600 }}>Confidence</span>
+                <span style={{ fontSize: 13, color: "#fff", fontFamily: "var(--font-mono, monospace)", fontWeight: 500 }}>
                   {(isDetecting || isAnalyzingRegion) ? "--" : detections.length > 0 ? `Avg ${Math.round(detections.reduce((s: number, d: any) => s + (d.confidence ?? 0), 0) / detections.length * 100)}%` : "N/A"}
                 </span>
               </div>

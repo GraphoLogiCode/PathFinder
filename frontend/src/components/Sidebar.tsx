@@ -22,6 +22,7 @@ interface Props {
   isSelectingRegion: boolean;
   isAnalyzingRegion: boolean;
   onGenerateRescuePlan: (severity: string) => void;
+  regionMessage: string | null;
 }
 
 /* ── Damage level config ─────────────────────────────────────────────────── */
@@ -48,6 +49,7 @@ export default function Sidebar({
   isSelectingRegion,
   isAnalyzingRegion,
   onGenerateRescuePlan,
+  regionMessage,
 }: Props) {
   const [mode, setMode] = useState<TransportMode>("pedestrian");
   const [routing, setRouting] = useState(false);
@@ -238,6 +240,21 @@ export default function Sidebar({
           <p style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 6, textAlign: "center" }}>
             Draw a box on the map to run AI damage detection
           </p>
+          {regionMessage && (
+            <p style={{
+              fontSize: 12,
+              color: regionMessage.startsWith("✅") ? "#22c55e" : regionMessage.startsWith("❌") ? "#ef4444" : "rgba(255,255,255,0.6)",
+              marginTop: 8,
+              textAlign: "center",
+              padding: "6px 10px",
+              background: regionMessage.startsWith("✅") ? "rgba(34,197,94,0.08)" : regionMessage.startsWith("❌") ? "rgba(239,68,68,0.08)" : "rgba(255,255,255,0.04)",
+              borderRadius: 4,
+              border: `1px solid ${regionMessage.startsWith("✅") ? "rgba(34,197,94,0.2)" : regionMessage.startsWith("❌") ? "rgba(239,68,68,0.2)" : "rgba(255,255,255,0.08)"}`,
+              lineHeight: 1.4,
+            }}>
+              {regionMessage}
+            </p>
+          )}
         </div>
 
         {/* ── Section: Damage Warning Summary ────────────────────────────── */}
