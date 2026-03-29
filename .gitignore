@@ -3,7 +3,7 @@ data/
 
 # ===== Model weights =====
 ai/weights/*.pt
-runs/
+# Note: runs/ is NOT ignored — trained model results are tracked
 
 # ===== Python =====
 __pycache__/
