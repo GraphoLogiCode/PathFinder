@@ -17,6 +17,7 @@ A Next.js web app with two main views:
    - Upload satellite image → see damage polygons on the satellite map
    - Click to set Start + Destination → see the safest route on real roads
    - Toggle between Map and Satellite view
+   - **Right panel**: AI-generated rescue plan (evacuation, risk zones, resources, actions)
    - Save the mission → reload it later from the dashboard
 
 ---
@@ -59,7 +60,8 @@ frontend/
 │   │   ├── RouteLayer.tsx        # Route line layer
 │   │   ├── ImageUpload.tsx       # Drag-and-drop upload
 │   │   ├── MapControls.tsx       # Zoom, locate, layer toggle
-│   │   ├── Sidebar.tsx           # Controls panel
+│   │   ├── Sidebar.tsx           # Left controls panel
+│   │   ├── AnalysisPanel.tsx     # Right panel — AI rescue plan display
 │   │   └── MissionCard.tsx       # Dashboard mission list item
 │   └── lib/
 │       ├── api.ts                # Fetch wrappers for backend
@@ -568,6 +570,26 @@ export async function getMissions() {
   const res = await fetch(`${API_BASE}/missions/`);
   return res.json();
 }
+
+export async function analyzeArea(data: {
+  danger_zones: any;
+  route_summary?: any;
+  maneuvers?: any[];          // Valhalla turn-by-turn directions
+  route_geometry?: any;       // GeoJSON geometry (LineString)
+  start?: { lat: number; lng: number };
+  end?: { lat: number; lng: number };
+  disaster_type?: string;
+  disaster_location?: string;
+  transport_mode?: string;
+}) {
+  const res = await fetch(`${API_BASE}/analyze/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`Analysis failed: ${res.statusText}`);
+  return res.json();
+}
 ```
 
 ---
@@ -591,6 +613,167 @@ export async function getMissions() {
 
 ---
 
+## Phase 4 — AI Analysis Panel (Integrate When Backend Is Ready)
+
+> [!NOTE]
+> This phase is **deferred** until all backend endpoints (`/detect`, `/georef`, `/route`, `/analyze`) are working. Build the `AnalysisPanel.tsx` component, but wire it up last.
+
+### Step 13: Build `AnalysisPanel.tsx` — Right panel for AI rescue plan
+
+The right panel shows the GPT-5.4-mini generated rescue plan. It is a collapsible sliding panel that appears after the user clicks "Analyze Area".
+
+**What it displays:**
+
+| Section | Content | Visual |
+|---|---|---|
+| **Situation Summary** | 2-3 sentence overview | Text block with alert icon |
+| **Risk Assessment** | Risk zones with severity tags | Color-coded cards (critical=red, high=orange, etc.) |
+| **Evacuation Plan** | Priority zones, assembly points | Numbered list with map markers |
+| **Resource Allocation** | Water, food, medical, shelter needs | Priority badges (immediate/6h/24h) |
+| **Immediate Actions** | Time-critical steps | Ordered list with team assignments |
+| **Route Analysis** | Why this route, alternatives, hazards | Expandable accordion |
+
+```typescript
+"use client";
+import { useState } from "react";
+import { analyzeArea } from "@/lib/api";
+
+interface Props {
+  dangerZones: any;
+  routeSummary: any;
+  start: [number, number] | null;
+  end: [number, number] | null;
+}
+
+export default function AnalysisPanel({ dangerZones, routeSummary, start, end }: Props) {
+  const [plan, setPlan] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+
+  const handleAnalyze = async () => {
+    setLoading(true);
+    try {
+      const result = await analyzeArea({
+        danger_zones: dangerZones,
+        route_summary: routeSummary,
+        start: start ? { lat: start[1], lng: start[0] } : undefined,
+        end: end ? { lat: end[1], lng: end[0] } : undefined,
+        disaster_type: "hurricane",
+        disaster_location: "Panama City, FL",
+      });
+      setPlan(result.plan);
+      setIsOpen(true);
+    } catch (err) {
+      console.error("Analysis failed:", err);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <>
+      {/* Trigger button (in sidebar or floating) */}
+      <button
+        onClick={handleAnalyze}
+        disabled={!dangerZones || loading}
+        className="w-full py-2 rounded-lg bg-blue-600 hover:bg-blue-500
+                   disabled:bg-zinc-700 disabled:text-zinc-500
+                   text-white font-medium transition-colors"
+      >
+        {loading ? "🤖 Analyzing..." : "🤖 AI Rescue Plan"}
+      </button>
+
+      {/* Sliding right panel */}
+      {isOpen && plan && (
+        <aside className="fixed top-0 right-0 w-96 h-full bg-zinc-900/95
+                         backdrop-blur-md border-l border-zinc-700
+                         overflow-y-auto p-6 z-50 shadow-2xl">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-lg font-bold text-white">🤖 AI Rescue Plan</h2>
+            <button onClick={() => setIsOpen(false)} className="text-zinc-400 hover:text-white">
+              ✕
+            </button>
+          </div>
+
+          {/* Situation Summary */}
+          <section className="mb-6">
+            <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+              Situation Overview
+            </h3>
+            <p className="text-sm text-zinc-300">{plan.situation_summary}</p>
+          </section>
+
+          {/* Risk Assessment */}
+          <section className="mb-6 space-y-2">
+            <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+              Risk Zones
+            </h3>
+            {plan.risk_assessment?.map((risk: any, i: number) => (
+              <div key={i} className="bg-zinc-800 rounded-lg p-3">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-sm font-medium text-white">{risk.zone}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium
+                    ${risk.severity === 'critical' ? 'bg-red-500/20 text-red-400' :
+                      risk.severity === 'high' ? 'bg-orange-500/20 text-orange-400' :
+                      risk.severity === 'moderate' ? 'bg-yellow-500/20 text-yellow-400' :
+                      'bg-green-500/20 text-green-400'}`}>
+                    {risk.severity}
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-400">{risk.recommendation}</p>
+              </div>
+            ))}
+          </section>
+
+          {/* Immediate Actions */}
+          <section className="mb-6 space-y-2">
+            <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+              Immediate Actions
+            </h3>
+            {plan.immediate_actions?.map((action: any, i: number) => (
+              <div key={i} className="flex gap-3 items-start">
+                <span className="w-6 h-6 rounded-full bg-emerald-600 text-white
+                               text-xs flex items-center justify-center flex-shrink-0">
+                  {action.priority}
+                </span>
+                <div>
+                  <p className="text-sm text-white">{action.action}</p>
+                  <p className="text-xs text-zinc-500">
+                    {action.responsible_team} · {action.time_window}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </section>
+
+          {/* Resource Allocation */}
+          <section className="mb-6 space-y-2">
+            <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+              Resources Needed
+            </h3>
+            {plan.resource_allocation?.map((res: any, i: number) => (
+              <div key={i} className="bg-zinc-800 rounded-lg p-3 flex justify-between">
+                <div>
+                  <p className="text-sm text-white capitalize">{res.resource}</p>
+                  <p className="text-xs text-zinc-400">{res.deployment_location}</p>
+                </div>
+                <span className={`text-xs px-2 py-0.5 rounded-full h-fit
+                  ${res.priority === 'immediate' ? 'bg-red-500/20 text-red-400' :
+                    res.priority === 'within_6h' ? 'bg-orange-500/20 text-orange-400' :
+                    'bg-yellow-500/20 text-yellow-400'}`}>
+                  {res.priority}
+                </span>
+              </div>
+            ))}
+          </section>
+        </aside>
+      )}
+    </>
+  );
+}
+```
+
+---
+
 ## Your Deliverables Checklist
 
 ```
@@ -600,7 +783,8 @@ export async function getMissions() {
 - [ ] RouteLayer.tsx          (safe route line layer)
 - [ ] ImageUpload.tsx         (drag-and-drop → POST /detect)
 - [ ] Sidebar.tsx             (controls, legend, transport mode, actions)
-- [ ] lib/api.ts              (backend fetch wrappers — detect, georef, route)
+- [ ] AnalysisPanel.tsx       (right panel — AI rescue plan display)  ← NEW (deferred)
+- [ ] lib/api.ts              (backend fetch wrappers — detect, georef, route, analyze)
 - [ ] lib/mapStyle.ts         (satellite + street tile configs)
 - [ ] Dashboard page          (hero + saved missions)
 - [ ] Mission page            (full interactive map view)
@@ -615,7 +799,7 @@ export async function getMissions() {
 |---|---|---|
 | Person A | Backend running at `localhost:8000` with stub `/detect` endpoint | Day 1, first half |
 | Person A | Working `/detect`, `/georef`, and `/route` endpoints | Day 1, second half |
-| Person A | `/missions` CRUD endpoints | Day 2, first half |
+| Person A | `/missions` CRUD + `/analyze` endpoint | Day 2, first half |
 | AI Lead | Agreement on the detection JSON schema | Day 1, first half |
 
 ---

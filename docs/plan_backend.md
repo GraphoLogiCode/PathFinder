@@ -26,6 +26,10 @@ User uploads satellite image (Frontend)
         ↓
   Frontend draws route line avoiding red zones
         ↓
+  POST /analyze ← NEW: GPT-5.4-mini rescue plan generation
+        ↓
+  Frontend shows structured rescue plan in right panel
+        ↓
   User clicks "Save Mission"
         ↓
   POST /missions ← Supabase persistence
@@ -44,6 +48,7 @@ User uploads satellite image (Frontend)
 | **python-multipart** | Handle file uploads |
 | **Shapely 2.0** | RDP polygon simplification, union, validation |
 | **httpx** | Async HTTP client for Valhalla API calls |
+| **openai** | GPT-5.4-mini API client for AI rescue plan analysis |
 | **Supabase Python SDK** | Database client |
 | **Ultralytics** | Load and run YOLO model (when `best.pt` is ready) |
 
@@ -64,12 +69,14 @@ backend/
 │       ├── detect.py        # POST /detect  (YOLO inference)
 │       ├── georef.py        # POST /georef  (pixel → GeoJSON)
 │       ├── route.py         # POST /route   (Valhalla routing)
+│       ├── analyze.py       # POST /analyze (GPT-5.4-mini rescue plan)
 │       └── missions.py      # CRUD /missions
 ├── tests/
 │   ├── test_health.py
 │   ├── test_detect.py
 │   ├── test_georef.py
-│   └── test_route.py
+│   ├── test_route.py
+│   └── test_analyze.py
 ├── requirements.txt
 └── .env
 ```
@@ -155,6 +162,7 @@ SUPABASE_URL=https://ugpdqpsecgrnykudicpi.supabase.co
 SUPABASE_KEY=sb_publishable_G3hvgJMIK8gvcS5fXrItEA_dTxyUW8z
 MODEL_PATH=../ai/weights/best.pt
 VALHALLA_URL=http://192.168.137.117:8002
+OPENAI_API_KEY=sk-proj-...your-key-here...
 ```
 
 ---
@@ -205,6 +213,7 @@ python-multipart
 pydantic>=2.0
 pydantic-settings
 httpx
+openai>=1.50
 supabase>=2.0
 python-dotenv
 ```
@@ -229,6 +238,7 @@ class Settings(BaseSettings):
     supabase_key: str = ""
     model_path: str = "../ai/weights/best.pt"
     valhalla_url: str = "http://192.168.137.117:8002"
+    openai_api_key: str = ""  # GPT-5.4-mini for rescue plan analysis
     max_upload_size_mb: int = 20
 
 
@@ -333,7 +343,7 @@ def get_supabase():
 ```python
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import detect, georef, route, missions
+from app.routes import detect, georef, route, analyze, missions
 
 app = FastAPI(title="PathFinder API", version="3.0.0")
 
@@ -347,6 +357,7 @@ app.add_middleware(
 app.include_router(detect.router, prefix="/detect", tags=["Detection"])
 app.include_router(georef.router, prefix="/georef", tags=["Geo-referencing"])
 app.include_router(route.router,  prefix="/route",  tags=["Routing"])
+app.include_router(analyze.router, prefix="/analyze", tags=["AI Analysis"])
 app.include_router(missions.router, prefix="/missions", tags=["Missions"])
 
 
@@ -845,6 +856,237 @@ async def detect_damage(image: UploadFile = File(...)):
 
 ---
 
+## Phase 5 — AI Rescue Plan Analysis (GPT-5.4-mini)
+
+This endpoint sends danger zone data, route context, and area information to GPT-5.4-mini, which generates a structured rescue/response plan. The output will display in the frontend's right panel (integrated later when all backend is ready).
+
+### What GPT-5.4-mini Analyzes
+
+| Analysis Area | Description |
+| :-- | :-- |
+| **Evacuation Planning** | Who should move where, priority zones, assembly points |
+| **Risk Zone Assessment** | Flood, structural collapse, aftershock, fire spread risks |
+| **Resource Allocation** | Food, water, shelter, medical supplies distribution plan |
+| **Population Tracking** | Estimated affected population, displacement patterns |
+| **Route Strategy** | Why the safe route was chosen, alternative routes |
+| **Immediate Actions** | Time-critical steps for first responders |
+
+### Step 13: Create `routes/analyze.py`
+
+```python
+from fastapi import APIRouter, HTTPException
+from openai import AsyncOpenAI
+from app.config import settings
+from app.models import AnalyzeRequest, AnalyzeResponse
+
+router = APIRouter()
+
+
+def build_system_prompt() -> str:
+    return """You are a disaster response planning AI assistant for NGO field operations.
+You analyze satellite-detected damage zones and computed safe routes to generate
+actionable rescue plans.
+
+You must respond with a JSON object containing these exact fields:
+{
+  "situation_summary": "2-3 sentence overview of the disaster area",
+  "risk_assessment": [
+    {
+      "zone": "description of area",
+      "risk_type": "structural_collapse | flood | fire | aftershock | chemical",
+      "severity": "critical | high | moderate | low",
+      "recommendation": "what to do about this zone"
+    }
+  ],
+  "evacuation_plan": {
+    "priority_zones": ["list of areas to evacuate first"],
+    "assembly_points": ["suggested safe gathering locations"],
+    "estimated_affected": "rough population estimate",
+    "evacuation_routes": ["description of recommended evacuation corridors"]
+  },
+  "resource_allocation": [
+    {
+      "resource": "water | food | medical | shelter | search_rescue",
+      "priority": "immediate | within_6h | within_24h",
+      "quantity_estimate": "rough estimate",
+      "deployment_location": "where to deploy"
+    }
+  ],
+  "immediate_actions": [
+    {
+      "action": "what to do",
+      "priority": 1,
+      "responsible_team": "search_rescue | medical | logistics | comms",
+      "time_window": "how soon"
+    }
+  ],
+  "route_analysis": {
+    "primary_route_reasoning": "why this route is safest",
+    "alternative_considerations": "other route options and tradeoffs",
+    "hazards_along_route": ["list of hazards near but not on the route"]
+  }
+}
+
+Be specific, actionable, and prioritize life safety. Use the damage severity data
+(no-damage, minor-damage, major-damage, destroyed) to inform your recommendations.
+Always respond with valid JSON only — no markdown, no extra text."""
+
+
+def build_user_prompt(request: AnalyzeRequest) -> str:
+    # Summarize danger zones
+    zone_summary = []
+    zone_details = []
+    if request.danger_zones and request.danger_zones.get("features"):
+        severity_counts = {}
+        for feat in request.danger_zones["features"]:
+            sev = feat["properties"].get("severity", "unknown")
+            severity_counts[sev] = severity_counts.get(sev, 0) + 1
+            # Extract centroid for location context
+            coords = feat["geometry"].get("coordinates", [[]])
+            if coords and coords[0]:
+                flat = coords[0]
+                avg_lng = sum(c[0] for c in flat) / len(flat)
+                avg_lat = sum(c[1] for c in flat) / len(flat)
+                zone_details.append(
+                    f"  - {sev} zone at ({avg_lat:.4f}, {avg_lng:.4f}), "
+                    f"weight={feat['properties'].get('danger_weight', '?')}"
+                )
+        zone_summary = [
+            f"{count}x {sev}" for sev, count in severity_counts.items()
+        ]
+
+    prompt = f"""Analyze this disaster area and generate a rescue plan.
+
+DISASTER CONTEXT:
+- Location: {request.disaster_location or "Unknown"}
+- Disaster type: {request.disaster_type or "Unknown"}
+- Total danger zones detected: {len(request.danger_zones.get('features', [])) if request.danger_zones else 0}
+- Damage breakdown: {', '.join(zone_summary) if zone_summary else 'No data'}
+"""
+
+    # Add per-zone details (truncate to 20 to keep token count manageable)
+    if zone_details:
+        prompt += "\nDANGER ZONE LOCATIONS (top 20):\n"
+        prompt += "\n".join(zone_details[:20])
+        if len(zone_details) > 20:
+            prompt += f"\n  ... and {len(zone_details) - 20} more zones"
+        prompt += "\n"
+
+    if request.route_summary:
+        prompt += f"""
+COMPUTED SAFE ROUTE SUMMARY:
+- Distance: {request.route_summary.get('distance_km', 'N/A')} km
+- Travel time: {request.route_summary.get('time_minutes', 'N/A')} minutes
+- Danger zones avoided: {request.route_summary.get('danger_zones_avoided', 0)}
+- Transport mode: {request.transport_mode or 'pedestrian'}
+"""
+
+    # Full turn-by-turn maneuvers from Valhalla
+    if request.maneuvers:
+        prompt += "\nTURN-BY-TURN ROUTE DIRECTIONS:\n"
+        for i, m in enumerate(request.maneuvers[:30]):  # Cap at 30 steps
+            instruction = m.get("instruction", "Continue")
+            distance = m.get("distance", 0)
+            street = m.get("street_name", "")
+            prompt += f"  {i+1}. {instruction}"
+            if street:
+                prompt += f" on {street}"
+            prompt += f" ({distance:.1f} km)\n" if isinstance(distance, float) else f" ({distance} km)\n"
+
+    # Route geometry — sample a few waypoints for spatial context
+    if request.route_geometry and request.route_geometry.get("coordinates"):
+        coords = request.route_geometry["coordinates"]
+        prompt += f"\nROUTE GEOMETRY ({len(coords)} waypoints):\n"
+        # Sample start, 25%, 50%, 75%, end for spatial awareness
+        sample_indices = [0, len(coords)//4, len(coords)//2, 3*len(coords)//4, -1]
+        labels = ["Start", "25%", "Midpoint", "75%", "End"]
+        for label, idx in zip(labels, sample_indices):
+            c = coords[idx]
+            prompt += f"  - {label}: ({c[1]:.5f}, {c[0]:.5f})\n"
+
+    if request.start and request.end:
+        prompt += f"""
+ROUTE ENDPOINTS:
+- Start: ({request.start.lat}, {request.start.lng})
+- Destination: ({request.end.lat}, {request.end.lng})
+"""
+
+    prompt += """
+Using the route directions and danger zone locations, generate a comprehensive rescue plan.
+Pay special attention to:
+1. Which streets/intersections along the route pass near danger zones
+2. Where along the route to stage resources and personnel
+3. Which maneuver steps are in high-risk segments
+4. Alternative routes if the primary becomes blocked
+
+Respond with valid JSON only."""
+
+    return prompt
+
+
+@router.post("/")
+async def analyze_area(request: AnalyzeRequest):
+    """
+    Send danger zone + route data to GPT-5.4-mini for rescue plan generation.
+    Returns a structured plan covering evacuation, resources, risk assessment.
+    """
+    if not settings.openai_api_key:
+        raise HTTPException(503, "OpenAI API key not configured")
+
+    client = AsyncOpenAI(api_key=settings.openai_api_key)
+
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-5.4-mini",
+            messages=[
+                {"role": "system", "content": build_system_prompt()},
+                {"role": "user", "content": build_user_prompt(request)},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.3,   # Low temp for consistent, factual output
+            max_tokens=2000,
+        )
+
+        import json
+        plan = json.loads(response.choices[0].message.content)
+
+        return AnalyzeResponse(
+            plan=plan,
+            model="gpt-5.4-mini",
+            tokens_used=response.usage.total_tokens if response.usage else 0,
+        )
+
+    except Exception as e:
+        raise HTTPException(502, f"AI analysis failed: {str(e)}")
+```
+
+### Step 14: Add Pydantic models for analysis
+
+Add these to `models.py`:
+
+```python
+# ── AI Analysis (GPT-5.4-mini) ─────────────────────────────
+
+class AnalyzeRequest(BaseModel):
+    danger_zones: dict | None = None       # GeoJSON FeatureCollection
+    route_summary: dict | None = None      # {distance_km, time_minutes, ...}
+    maneuvers: list[dict] | None = None    # Valhalla turn-by-turn directions
+    route_geometry: dict | None = None     # GeoJSON geometry {type: "LineString", coordinates: [...]}
+    start: LatLng | None = None
+    end: LatLng | None = None
+    disaster_type: str | None = None       # "hurricane", "earthquake", etc.
+    disaster_location: str | None = None   # "Panama City, FL"
+    transport_mode: str | None = "pedestrian"
+
+
+class AnalyzeResponse(BaseModel):
+    plan: dict                             # Structured rescue plan from GPT
+    model: str = "gpt-5.4-mini"
+    tokens_used: int = 0
+```
+
+---
+
 ## xView2 Dataset — Geographic Analysis
 
 The demo uses **Hurricane Michael** (Panama City, FL) — the largest high-quality disaster in the xView2 dataset:
@@ -872,12 +1114,13 @@ The demo uses **Hurricane Michael** (Panama City, FL) — the largest high-quali
 - [ ] Valhalla running on DGX Spark (Docker + Florida OSM)
 - [ ] Supabase missions table created
 - [ ] backend/app/main.py           (FastAPI app + CORS)
-- [ ] backend/app/config.py         (env vars + Valhalla URL)
-- [ ] backend/app/models.py         (Pydantic v2 schemas)
+- [ ] backend/app/config.py         (env vars + Valhalla URL + OpenAI key)
+- [ ] backend/app/models.py         (Pydantic v2 schemas + AnalyzeRequest/Response)
 - [ ] backend/app/database.py       (Supabase client)
 - [ ] backend/app/routes/detect.py  (POST /detect — xView2 stubs → YOLO)
 - [ ] backend/app/routes/georef.py  (POST /georef — 4 geometry algorithms)
 - [ ] backend/app/routes/route.py   (POST /route — Valhalla integration)
+- [ ] backend/app/routes/analyze.py (POST /analyze — GPT-5.4-mini rescue plan)  ← NEW
 - [ ] backend/app/routes/missions.py (Supabase CRUD)
 - [ ] backend/requirements.txt
 - [ ] backend/.env

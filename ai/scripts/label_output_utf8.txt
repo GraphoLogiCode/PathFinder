@@ -1,0 +1,41 @@
+﻿=== XY Features ===
+Feature 0:
+  properties: {'feature_type': 'building', 'subtype': 'no-damage', 'uid': '9081d4e5-f6d8-400c-bef1-7d840e1cf4b1'}
+  wkt: POLYGON ((351.0124439430131 0.00589797093617402, 360.0538717841367 19.4136952873549, 347.8638962492905 25.31207054471811, 344.3248710933998 17.84079521875636, 331.3484455259158 24.13239549267572, 320.
+
+Feature 1:
+  properties: {'feature_type': 'building', 'subtype': 'no-damage', 'uid': 'd852a424-1a98-4b2d-b528-f54fd324db21'}
+  wkt: POLYGON ((83.16576640189199 492.8985038844792, 83.20999827131408 492.8200002217815, 90.40475028597062 497.2441330073823, 68.1953937185872 528.1441073658972, 71.09226631159765 530.0753557634528, 62.160
+
+Total features: 9
+
+=== Metadata ===
+{
+  "sensor": "WORLDVIEW03_VNIR",
+  "provider_asset_type": "WORLDVIEW03_VNIR",
+  "gsd": 1.4085245,
+  "capture_date": "2018-06-22T16:55:40.000Z",
+  "off_nadir_angle": 21.97336,
+  "pan_resolution": 0.35173947,
+  "sun_azimuth": 58.571484,
+  "sun_elevation": 71.182274,
+  "target_azimuth": 314.29373,
+  "disaster": "guatemala-volcano",
+  "disaster_type": "volcano",
+  "catalog_id": "104001003E575F00",
+  "original_width": 1024,
+  "original_height": 1024,
+  "width": 1024,
+  "height": 1024,
+  "id": "MjU0NzE3MQ.z6MDjyLaMn6MS-WTZu_zdb9iO7Q",
+  "img_name": "guatemala-volcano_00000007_post_disaster.png"
+}
+
+=== PRE-DISASTER XY Features ===
+Feature 0:
+  properties: {'feature_type': 'building', 'uid': '9081d4e5-f6d8-400c-bef1-7d840e1cf4b1'}
+  wkt: POLYGON ((351.0096981191776 0, 360.0538735145296 19.41369506460775, 347.8638979816639 25.31207032244601, 344.324872826961 17.84079499585088, 331.3484472597168 24.13239527087836, 320.3381467784187 3.68
+Feature 1:
+  properties: {'feature_type': 'building', 'uid': 'd852a424-1a98-4b2d-b528-f54fd324db21'}
+  wkt: POLYGON ((83.16576813087266 492.8985036624791, 83.20999999999999 492.82, 90.40475201557565 497.244132785719, 68.19539544536035 528.1441071442794, 71.09226804147539 530.0753555416894, 62.16024420345402
+Total pre features: 9

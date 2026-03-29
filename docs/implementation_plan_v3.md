@@ -38,6 +38,10 @@ flowchart LR
     F --> G[✅ Safe Route<br/>real road directions]
     E --> H[🗺️ MapLibre GL JS<br/>satellite + overlays]
     G --> H
+    E --> I[🤖 GPT-5.4-mini<br/>AI Rescue Planner]
+    G --> I
+    I --> J[📋 Rescue Plan<br/>evacuation + resources]
+    J --> H
 ```
 
 ---
@@ -108,10 +112,11 @@ Valhalla API available at: `http://192.168.137.117:8002`
 | **`POST /detect`** | Stub first → wire to `best.pt` when ready |
 | **`POST /georef`** | 4 geometry algorithms (see below) |
 | **`POST /route`** | Call Valhalla at `192.168.137.117:8002` with `exclude_polygons` |
+| **`POST /analyze`** | **NEW**: Send danger zones + route to GPT-5.4-mini → structured rescue plan |
 | **`CRUD /missions`** | Save/load missions to Supabase |
 | **Error handling** | Input validation, graceful error responses |
 
-**Tech**: Python, FastAPI, Pydantic v2, httpx, Shapely, Supabase, Valhalla API
+**Tech**: Python, FastAPI, Pydantic v2, httpx, Shapely, OpenAI, Supabase, Valhalla API
 
 **Deliverables**: Trained `best.pt`, working API server, Valhalla integration
 
@@ -161,6 +166,7 @@ lng = anchor_lng + (dx_meters / (111_320 * cos(radians(anchor_lat))))
 | **Image upload UI** | Drag-and-drop component → `POST /detect` |
 | **Click-to-place markers** | Start (green) and Destination (red) markers on map click |
 | **Sidebar controls** | Damage legend, route summary, transport mode selector |
+| **AI Analysis panel** | **NEW**: Right-side panel showing GPT-5.4-mini rescue plan (deferred until backend ready) |
 | **Mission dashboard** | List saved missions, click to reload |
 
 **Tech**: TypeScript, React 19, Next.js 15, MapLibre GL JS, react-map-gl, Tailwind CSS 4
@@ -193,6 +199,7 @@ d:\School_Project\Yhacks\
 |   |       +-- detect.py                # POST /detect (YOLO inference)
 |   |       +-- georef.py                # POST /georef (pixel → GeoJSON)
 |   |       +-- route.py                 # POST /route (Valhalla routing)
+|   |       +-- analyze.py               # POST /analyze (GPT-5.4-mini rescue plan)
 |   |       +-- missions.py             # CRUD /missions
 |   +-- tests/
 |   +-- requirements.txt
@@ -211,7 +218,8 @@ d:\School_Project\Yhacks\
 |   |   |   +-- RouteLayer.tsx           # Route line layer
 |   |   |   +-- ImageUpload.tsx          # Drag-and-drop upload
 |   |   |   +-- MapControls.tsx          # Zoom, layer toggle
-|   |   |   +-- Sidebar.tsx              # Controls panel
+|   |   |   +-- Sidebar.tsx              # Left controls panel
+|   |   |   +-- AnalysisPanel.tsx        # Right panel — AI rescue plan display
 |   |   +-- lib/
 |   |       +-- api.ts                   # Backend fetch wrappers
 |   |       +-- mapStyle.ts              # Satellite + street tile configs
@@ -288,6 +296,53 @@ d:\School_Project\Yhacks\
 }
 ```
 
+### AI Analysis Response (from GPT-5.4-mini)
+
+```json
+{
+  "plan": {
+    "situation_summary": "Area shows severe hurricane damage with 12 destroyed and 8 major-damage buildings...",
+    "risk_assessment": [
+      {
+        "zone": "Northwest residential block",
+        "risk_type": "structural_collapse",
+        "severity": "critical",
+        "recommendation": "Establish 50m exclusion zone. Deploy structural engineers before entry."
+      }
+    ],
+    "evacuation_plan": {
+      "priority_zones": ["Buildings within 100m of destroyed structures"],
+      "assembly_points": ["Open parking area at coordinates (30.115, -85.650)"],
+      "estimated_affected": "~200-400 residents",
+      "evacuation_routes": ["Primary: via computed safe route heading southeast"]
+    },
+    "resource_allocation": [
+      {
+        "resource": "search_rescue",
+        "priority": "immediate",
+        "quantity_estimate": "2 teams of 6",
+        "deployment_location": "NW residential block"
+      }
+    ],
+    "immediate_actions": [
+      {
+        "action": "Deploy search & rescue to destroyed buildings",
+        "priority": 1,
+        "responsible_team": "search_rescue",
+        "time_window": "within 1 hour"
+      }
+    ],
+    "route_analysis": {
+      "primary_route_reasoning": "Route avoids 3 collapsed structures on Main St",
+      "alternative_considerations": "Secondary route via Oak Ave adds 0.8km but avoids flood zone",
+      "hazards_along_route": ["Minor debris at intersection 2"]
+    }
+  },
+  "model": "gpt-5.4-mini",
+  "tokens_used": 1847
+}
+```
+
 ---
 
 ## Integration Data Flow
@@ -299,6 +354,7 @@ sequenceDiagram
     participant B as Backend (FastAPI)
     participant AI as YOLO26m-seg Model
     participant V as Valhalla (DGX Spark :8002)
+    participant GPT as GPT-5.4-mini
 
     U->>F: Upload satellite image + click anchor on map
     F->>B: POST /detect (image)
@@ -316,6 +372,13 @@ sequenceDiagram
     V-->>B: Route geometry + maneuvers
     B-->>F: Route GeoJSON + summary
     F->>F: Draw route line + show turn-by-turn
+
+    U->>F: Click "AI Rescue Plan"
+    F->>B: POST /analyze (danger_zones, route_summary, context)
+    B->>GPT: GPT-5.4-mini analysis
+    GPT-->>B: Structured rescue plan JSON
+    B-->>F: Plan JSON
+    F->>F: Display in right panel (evacuation, risk, resources)
 ```
 
 ---
@@ -346,6 +409,7 @@ sequenceDiagram
 | Export `best.pt`, wire real `/detect` | Dashboard with saved missions |
 | Set up Supabase + `/missions` CRUD | Map/Satellite toggle, sidebar polish |
 | Pre-process 3 demo images | Final UX polish, responsive layout |
+| Build `POST /analyze` (GPT-5.4-mini) | `AnalysisPanel.tsx` (wire when backend ready) |
 | Test full pipeline end-to-end | Loading states, animations |
 
 ---
