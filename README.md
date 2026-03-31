@@ -4,7 +4,7 @@
 
 PathFinder analyzes post-disaster satellite images using a custom-trained YOLO segmentation model, converts damage detections into geo-referenced danger zones, and computes safe pedestrian/vehicle routes that avoid destroyed areas.
 
-Built for [YHacks 2026](https://yhacks.org) by **GraphoLogiCode**.
+Built for [YHacks 2026] (https://devpost.com/software/pathfinder-7t2r3o?_gl=1*14jzjzt*_gcl_au*MTY2Nzc1NjAwMS4xNzc0OTA2MTUy*_ga*NTE1MzAyNjkuMTc3NDkwNjE1Mg..*_ga_0YHJK3Y10M*czE3NzQ5MjQ4NTAkbzIkZzEkdDE3NzQ5MjQ5MjckajQzJGwwJGgw)  by **GraphoLogiCode**.
 
 ---
 
