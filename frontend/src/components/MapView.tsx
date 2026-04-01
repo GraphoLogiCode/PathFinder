@@ -1,12 +1,14 @@
 "use client";
 import { useRef, useCallback, useState } from "react";
 import Map, { MapRef } from "react-map-gl/maplibre";
+import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { SATELLITE_STYLE, STREET_STYLE } from "@/lib/mapStyle";
 
 interface Props {
   onMapClick?: (lng: number, lat: number, x?: number, y?: number) => void;
   onMoveEnd?: (lng: number, lat: number) => void;
+  onMapReady?: (map: maplibregl.Map) => void;
   initialCenter?: [number, number]; // [lng, lat]
   initialZoom?: number;
   children?: React.ReactNode;
@@ -64,7 +66,7 @@ const MapIcon = () => (
   </svg>
 );
 
-export default function MapView({ onMapClick, onMoveEnd, initialCenter, initialZoom, children }: Props) {
+export default function MapView({ onMapClick, onMoveEnd, onMapReady, initialCenter, initialZoom, children }: Props) {
   const mapRef = useRef<MapRef>(null);
   const [isSatellite, setIsSatellite] = useState(true);
   const hasClickedMap = useRef(false);
@@ -103,7 +105,9 @@ export default function MapView({ onMapClick, onMoveEnd, initialCenter, initialZ
         onMoveEnd={(e) => onMoveEnd?.(e.viewState.longitude, e.viewState.latitude)}
         onLoad={() => {
           if (mapRef.current) {
-            (window as any).__pathfinderMap = mapRef.current.getMap();
+            const map = mapRef.current.getMap();
+            (window as any).__pathfinderMap = map;
+            onMapReady?.(map);
           }
         }}
         // @ts-ignore — preserveDrawingBuffer is needed for canvas.toBlob() region capture

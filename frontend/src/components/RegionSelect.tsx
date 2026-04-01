@@ -89,65 +89,85 @@ export default function RegionSelect({ active, onRegionSelected }: Props) {
         const latSpan = bounds.north - bounds.south;
         const lngSpan = bounds.east - bounds.west;
         if (latSpan > 0.0003 && lngSpan > 0.0003) {
-          // Capture the selected region from the map canvas
           const map = (window as any).__pathfinderMap;
           if (map) {
-            const canvas = map.getCanvas() as HTMLCanvasElement;
-            const canvasRect = canvas.getBoundingClientRect();
-            const containerRect = container.getBoundingClientRect();
+            // Force the map to re-render so the WebGL canvas has valid pixels
+            map.triggerRepaint();
 
-            // Convert container-relative coords to canvas-relative coords
-            // The RegionSelect overlay sits on <main>, but the canvas may be offset
-            const offsetX = containerRect.left - canvasRect.left;
-            const offsetY = containerRect.top - canvasRect.top;
-            const sx = Math.min(startPt.x, finalEnd.x) + offsetX;
-            const sy = Math.min(startPt.y, finalEnd.y) + offsetY;
-            const sw = Math.abs(finalEnd.x - startPt.x);
-            const sh = Math.abs(finalEnd.y - startPt.y);
+            // Capture the saved start/end points before the async callback
+            const savedStartPt = { ...startPt };
+            const savedFinalEnd = { ...finalEnd };
+            const savedContainer = container;
 
-            // Enforce minimum region size for meaningful YOLO inference
-            if (sw < 200 || sh < 200) {
-              console.warn("[RegionSelect] Region too small for analysis:", sw, "x", sh, "px. Minimum: 200x200.");
-              setStartPt(null);
-              setEndPt(null);
-              return;
-            }
+            requestAnimationFrame(() => {
+              const canvas = map.getCanvas() as HTMLCanvasElement;
+              const canvasRect = canvas.getBoundingClientRect();
+              const containerRect = savedContainer.getBoundingClientRect();
 
-            console.log("[RegionSelect] Capturing region:", {
-              containerOffset: { offsetX, offsetY },
-              crop: { sx, sy, sw, sh },
-              bounds,
-              canvasSize: { w: canvas.width, h: canvas.height },
-            });
+              // Convert container-relative coords to canvas-relative coords
+              const offsetX = containerRect.left - canvasRect.left;
+              const offsetY = containerRect.top - canvasRect.top;
+              const sx = Math.min(savedStartPt.x, savedFinalEnd.x) + offsetX;
+              const sy = Math.min(savedStartPt.y, savedFinalEnd.y) + offsetY;
+              const sw = Math.abs(savedFinalEnd.x - savedStartPt.x);
+              const sh = Math.abs(savedFinalEnd.y - savedStartPt.y);
 
-            // Account for devicePixelRatio
-            const dpr = window.devicePixelRatio || 1;
-            const cropCanvas = document.createElement("canvas");
-            cropCanvas.width = sw * dpr;
-            cropCanvas.height = sh * dpr;
-            const ctx = cropCanvas.getContext("2d");
-            if (ctx) {
+              // Enforce minimum region size for meaningful YOLO inference
+              if (sw < 200 || sh < 200) {
+                console.warn("[RegionSelect] Region too small:", sw, "x", sh, "px");
+                return;
+              }
+
+              console.log("[RegionSelect] Capturing region:", {
+                crop: { sx, sy, sw, sh },
+                canvasSize: { w: canvas.width, h: canvas.height },
+              });
+
+              const MODEL_SIZE = 1024;
+              const dpr = window.devicePixelRatio || 1;
+
+              // Crop and scale to 1024x1024 in one step
+              const outputCanvas = document.createElement("canvas");
+              outputCanvas.width = MODEL_SIZE;
+              outputCanvas.height = MODEL_SIZE;
+              const ctx = outputCanvas.getContext("2d");
+              if (!ctx) return;
+
+              ctx.imageSmoothingEnabled = true;
+              ctx.imageSmoothingQuality = "high";
               ctx.drawImage(
                 canvas,
                 sx * dpr, sy * dpr, sw * dpr, sh * dpr,
-                0, 0, sw * dpr, sh * dpr
+                0, 0, MODEL_SIZE, MODEL_SIZE
               );
-              cropCanvas.toBlob((blob) => {
-                if (blob) {
-                  console.log("[RegionSelect] Captured blob:", blob.size, "bytes,", cropCanvas.width, "x", cropCanvas.height, "px");
-                  onRegionSelected({
-                    ...bounds,
-                    imageBlob: blob,
-                    imageWidth: cropCanvas.width,
-                    imageHeight: cropCanvas.height,
-                  });
-                } else {
-                  console.error("[RegionSelect] canvas.toBlob() returned null — preserveDrawingBuffer may be off");
-                }
-              }, "image/png");
-            }
+
+              // Verify the capture isn't blank
+              const sample = ctx.getImageData(MODEL_SIZE / 2, MODEL_SIZE / 2, 1, 1).data;
+              const isBlank = sample[0] === 0 && sample[1] === 0 && sample[2] === 0 && sample[3] === 0;
+
+              const doCapture = () => {
+                outputCanvas.toBlob((blob) => {
+                  if (blob) {
+                    console.log("[RegionSelect] Captured:", blob.size, "bytes,", MODEL_SIZE, "x", MODEL_SIZE);
+                    onRegionSelected({ ...bounds, imageBlob: blob, imageWidth: MODEL_SIZE, imageHeight: MODEL_SIZE });
+                  } else {
+                    console.error("[RegionSelect] toBlob returned null");
+                  }
+                }, "image/png");
+              };
+
+              if (isBlank) {
+                console.warn("[RegionSelect] Blank capture — retrying in 300ms");
+                setTimeout(() => {
+                  ctx.drawImage(canvas, sx * dpr, sy * dpr, sw * dpr, sh * dpr, 0, 0, MODEL_SIZE, MODEL_SIZE);
+                  doCapture();
+                }, 300);
+              } else {
+                doCapture();
+              }
+            });
           } else {
-            console.error("[RegionSelect] window.__pathfinderMap is not set");
+            console.error("[RegionSelect] __pathfinderMap not set");
           }
         } else {
           console.warn("[RegionSelect] Region geo-span too small:", { latSpan, lngSpan });

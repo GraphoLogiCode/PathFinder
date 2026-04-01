@@ -21,8 +21,6 @@ from app.routes.georef import run_georef  # reuse georef pipeline
 
 router = APIRouter()
 
-MAPTILER_KEY = "TQH7vqclXjIJIT15XHV1"
-
 
 class RegionRequest(BaseModel):
     north: float
@@ -53,7 +51,7 @@ def _build_static_url(north: float, south: float, east: float, west: float) -> s
 
     return (
         f"https://api.maptiler.com/maps/satellite/static/"
-        f"{cx},{cy},{zoom}/1024x1024@2x.png?key={MAPTILER_KEY}"
+        f"{cx},{cy},{zoom}/1024x1024@2x.png?key={settings.maptiler_key}"
     )
 
 

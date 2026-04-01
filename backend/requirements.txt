@@ -9,3 +9,5 @@ pydantic-settings
 httpx
 supabase>=2.0
 python-dotenv
+openai>=1.0
+opencv-python>=4.8

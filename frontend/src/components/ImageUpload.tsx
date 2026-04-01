@@ -6,6 +6,7 @@ interface Props {
   onDetections: (detections: any[]) => void;
   onDangerZones: (zones: any) => void;
   onUploadStateChange?: (isUploading: boolean) => void;
+  onGpsDetected?: (lat: number, lng: number) => void;
   mapCenter?: [number, number]; // [lng, lat] from MapView — used as georef anchor
 }
 
@@ -17,7 +18,7 @@ const UploadIcon = () => (
   </svg>
 );
 
-export default function ImageUpload({ onDetections, onDangerZones, onUploadStateChange, mapCenter }: Props) {
+export default function ImageUpload({ onDetections, onDangerZones, onUploadStateChange, onGpsDetected, mapCenter }: Props) {
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,14 +36,49 @@ export default function ImageUpload({ onDetections, onDangerZones, onUploadState
         onDetections(result.detections ?? []);
 
         // Step 2: Auto-georef — convert pixel masks → GeoJSON for map overlay
-        if (result.detections?.length > 0 && mapCenter) {
-          const geojson = await geoReference(
-            result.detections,
-            { lat: mapCenter[1], lng: mapCenter[0] },
-            2.07, // Default GSD (m/px) — Hurricane Michael demo
-            [result.image_size.width / 2, result.image_size.height / 2],
-          );
-          onDangerZones(geojson);
+        if (result.detections?.length > 0) {
+          const hasGps = !!result.gps_location;
+
+          // Use EXIF/catalog GPS from image if available, fall back to map center
+          const anchor = hasGps
+            ? { lat: result.gps_location.lat, lng: result.gps_location.lng }
+            : mapCenter
+            ? { lat: mapCenter[1], lng: mapCenter[0] }
+            : null;
+
+          if (anchor) {
+            // Estimate Ground Sample Distance from image dimensions.
+            // xBD satellite imagery (Maxar DigitalGlobe) is ~0.3 m/px at 1024×1024.
+            // For other resolutions, scale proportionally based on the assumption
+            // that 1024 pixels covers ~300 m of ground.
+            const imgW = result.image_size.width;
+            const imgH = result.image_size.height;
+            const gsd = result.gsd ?? (300 / Math.max(imgW, imgH));
+
+            console.log("[Upload] Georef anchor:",
+              hasGps ? "EXIF/catalog GPS" : "map center",
+              anchor, "GSD:", gsd.toFixed(4), "m/px"
+            );
+
+            const geojson = await geoReference(
+              result.detections,
+              anchor,
+              gsd,
+              [imgW / 2, imgH / 2],
+            );
+
+            // When GPS is known, fly directly to the precise GPS location.
+            // Don't also fly to the danger zone bounding box — that would
+            // cause two competing flyTo animations and land somewhere between.
+            if (hasGps) {
+              onGpsDetected?.(result.gps_location.lat, result.gps_location.lng);
+              // Set danger zones WITHOUT triggering flyToDangerZones
+              onDangerZones(geojson);
+            } else {
+              // No GPS — let flyToDangerZones centre on the georef'd polygons
+              onDangerZones(geojson);
+            }
+          }
         }
       } catch (err: any) {
         setError(err.message ?? "Upload failed");
@@ -51,7 +87,7 @@ export default function ImageUpload({ onDetections, onDangerZones, onUploadState
         onUploadStateChange?.(false);
       }
     },
-    [onDetections, onDangerZones, onUploadStateChange, mapCenter]
+    [onDetections, onDangerZones, onUploadStateChange, onGpsDetected, mapCenter]
   );
 
   return (

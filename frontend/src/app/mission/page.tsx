@@ -1,5 +1,5 @@
 "use client";
-import { useState, useCallback, useMemo, Suspense } from "react";
+import { useState, useCallback, useMemo, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import MapView from "@/components/MapView";
 import Sidebar from "@/components/Sidebar";
@@ -10,6 +10,7 @@ import AnalysisPanel from "@/components/AnalysisPanel";
 import RegionSelect from "@/components/RegionSelect";
 import { Marker } from "react-map-gl/maplibre";
 import { detectDamage, geoReference } from "@/lib/api";
+import type maplibregl from "maplibre-gl";
 
 export default function MissionPage() {
   return (
@@ -36,6 +37,8 @@ function MissionContent() {
   const [detections, setDetections] = useState<any[]>([]);
   const [isDetecting, setIsDetecting] = useState(false);
   const [mapCenter, setMapCenter] = useState<[number, number]>(initialCenter);
+  const mapInstanceRef = useRef<maplibregl.Map | null>(null);
+  const gpsFlyRef = useRef(false); // true when GPS flyTo is active — prevents competing flyToDangerZones
   const [routeSummary, setRouteSummary] = useState<any>(null);
   const [routeManeuvers, setRouteManeuvers] = useState<any[]>([]);
   const [ripple, setRipple] = useState<{ x: number; y: number; id: number } | null>(null);
@@ -58,6 +61,40 @@ function MissionContent() {
     [start, end, isSelectingRegion]
   );
 
+  /* ── Fly map to bounding box of danger zones ──────────────────────────── */
+  const flyToDangerZones = useCallback((geojson: GeoJSON.FeatureCollection) => {
+    const map = mapInstanceRef.current;
+    if (!map || !geojson.features.length) return;
+
+    // Compute bounding box across all feature coordinates
+    let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+    for (const feature of geojson.features) {
+      const geometry = feature.geometry;
+      // Handle Polygon and MultiPolygon
+      const coordSets =
+        geometry.type === "MultiPolygon"
+          ? (geometry as GeoJSON.MultiPolygon).coordinates.flat()
+          : geometry.type === "Polygon"
+          ? (geometry as GeoJSON.Polygon).coordinates
+          : [];
+      for (const ring of coordSets) {
+        for (const [lng, lat] of ring) {
+          if (lng < minLng) minLng = lng;
+          if (lng > maxLng) maxLng = lng;
+          if (lat < minLat) minLat = lat;
+          if (lat > maxLat) maxLat = lat;
+        }
+      }
+    }
+
+    if (!isFinite(minLng)) return;
+
+    map.fitBounds(
+      [[minLng, minLat], [maxLng, maxLat]],
+      { padding: 80, duration: 1400, maxZoom: 18 },
+    );
+  }, []);
+
   const handleClear = () => {
     setStart(null);
     setEnd(null);
@@ -78,15 +115,15 @@ function MissionContent() {
       setIsAnalyzingRegion(true);
       setRegionMessage(null);
       try {
-        // Convert blob to File for the existing /detect endpoint
+        // Send the map canvas screenshot to /detect with source=region
         const file = new File([bounds.imageBlob], "region.png", { type: "image/png" });
-        console.log("[Mission] Sending region for detection:", {
+        console.log("[Mission] Region analysis via canvas capture:", {
           blobSize: bounds.imageBlob.size,
           imageSize: `${bounds.imageWidth}x${bounds.imageHeight}`,
           bounds: { N: bounds.north.toFixed(5), S: bounds.south.toFixed(5), E: bounds.east.toFixed(5), W: bounds.west.toFixed(5) },
         });
 
-        // Step 1: Run YOLO via /detect (uses best.pt) with source=region for pre-processing
+        // Step 1: Run YOLO on the captured region screenshot
         const result = await detectDamage(file, "region");
         console.log("[Mission] Detection result:", {
           detections: result.detections?.length ?? 0,
@@ -94,17 +131,15 @@ function MissionContent() {
         });
         setDetections(result.detections ?? []);
 
-        // Step 2: Geo-reference using the actual region bounds
+        // Step 2: Geo-reference using actual bounds from the map
         if (result.detections?.length > 0) {
           const anchorLat = (bounds.north + bounds.south) / 2;
           const anchorLng = (bounds.east + bounds.west) / 2;
 
-          // Calculate GSD from bounds
+          // Calculate GSD from the geographic extent vs pixel dimensions
           const latSpanM = Math.abs(bounds.north - bounds.south) * 111320;
           const lngSpanM = Math.abs(bounds.east - bounds.west) * 111320 * Math.cos(anchorLat * Math.PI / 180);
           const gsd = Math.max(latSpanM / result.image_size.height, lngSpanM / result.image_size.width);
-
-          console.log("[Mission] Geo-referencing:", { anchorLat, anchorLng, gsd });
 
           const geojson = await geoReference(
             result.detections,
@@ -113,9 +148,10 @@ function MissionContent() {
             [result.image_size.width / 2, result.image_size.height / 2],
           );
           setDangerZones(geojson);
+          flyToDangerZones(geojson);
           setRegionMessage(`✅ Found ${result.detections.length} damage zone${result.detections.length > 1 ? "s" : ""}`);
         } else {
-          setRegionMessage("ℹ️ No damage detected in selected region — try a different area or zoom level");
+          setRegionMessage("ℹ️ No damage detected — try selecting over a disaster area");
         }
       } catch (err: any) {
         console.error("Region detection failed:", err);
@@ -124,7 +160,7 @@ function MissionContent() {
         setIsAnalyzingRegion(false);
       }
     },
-    []
+    [flyToDangerZones]
   );
 
   const handleGenerateRescuePlan = useCallback((severity: string) => {
@@ -188,6 +224,7 @@ function MissionContent() {
         <MapView
           onMapClick={handleMapClick}
           onMoveEnd={(lng, lat) => setMapCenter([lng, lat])}
+          onMapReady={(map) => { mapInstanceRef.current = map; }}
           initialCenter={initialCenter}
           initialZoom={urlLat ? 15 : 13}
         >
@@ -227,7 +264,25 @@ function MissionContent() {
         <div style={{ position: "absolute", top: 20, right: 20, width: 260, display: "flex", flexDirection: "column", gap: 16, zIndex: 10 }}>
           <ImageUpload
             onDetections={setDetections}
-            onDangerZones={setDangerZones}
+            onDangerZones={(zones) => {
+              setDangerZones(zones);
+              // Only fly to the bounding box if GPS didn't already position us.
+              // ImageUpload calls onGpsDetected BEFORE onDangerZones when GPS
+              // is available, so gpsFlyRef will be true in that case.
+              if (zones?.features?.length && !gpsFlyRef.current) {
+                flyToDangerZones(zones);
+              }
+              gpsFlyRef.current = false; // reset for next upload
+            }}
+            onGpsDetected={(lat, lng) => {
+              // GPS is the most accurate anchor — fly directly to it.
+              // Set flag so onDangerZones doesn't fire a competing animation.
+              gpsFlyRef.current = true;
+              const map = mapInstanceRef.current;
+              if (map) {
+                map.flyTo({ center: [lng, lat], zoom: 17, duration: 1400 });
+              }
+            }}
             onUploadStateChange={setIsDetecting}
             mapCenter={mapCenter}
           />

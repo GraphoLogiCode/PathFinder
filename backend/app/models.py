@@ -43,6 +43,8 @@ class DetectionResponse(BaseModel):
     """Response from POST /detect."""
     detections: list[Detection]
     image_size: dict
+    gps_location: LatLng | None = None
+    gsd: float | None = Field(None, description="Estimated Ground Sample Distance in meters/pixel")
 
 
 # ---------------------------------------------------------------------------
